@@ -1,0 +1,1 @@
+-- Client restrictions are now handled in sh_plugin.lua.

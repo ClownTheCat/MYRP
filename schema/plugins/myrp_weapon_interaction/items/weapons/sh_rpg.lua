@@ -1,0 +1,9 @@
+ITEM.name = "RPG"
+ITEM.description = "Ручной противотанковый гранатомёт."
+ITEM.model = "models/weapons/w_rocket_launcher.mdl"
+ITEM.class = "weapon_rpg"
+ITEM.width = 2
+ITEM.height = 3
+ITEM.category = "Weapons"
+ITEM.isWeapon = true
+ITEM.weaponCategory = "primary"

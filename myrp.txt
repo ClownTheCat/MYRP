@@ -1,0 +1,6 @@
+"myrp"
+{
+    "base"        "helix"
+    "title"       "My RP"
+    "maps"        ""
+}

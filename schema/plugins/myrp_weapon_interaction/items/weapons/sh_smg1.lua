@@ -1,0 +1,8 @@
+ITEM.name = "SMG"
+ITEM.description = "Пистолет-пулемёт."
+ITEM.model = "models/weapons/w_smg1.mdl"
+ITEM.class = "weapon_smg1"
+ITEM.width = 2
+ITEM.height = 2
+ITEM.category = "Weapons"
+ITEM.weaponCategory = "primary"
