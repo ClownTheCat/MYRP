@@ -163,29 +163,49 @@ util.AddNetworkString("MYRP_WeaponInteraction_Hold")
 
 local heldWeapons = {}
 
+local function SendHoldStatus(client, status)
+    if (!IsValid(client)) then return end
+
+    net.Start("MYRP_WeaponInteraction_Hold")
+        net.WriteString(status)
+    net.Send(client)
+end
+
 local function ReleaseWeaponHold(client, shouldThrow)
-    local entity = heldWeapons[client]
+    local state = heldWeapons[client]
     heldWeapons[client] = nil
 
-    if (!IsValid(entity)) then return end
-    if (entity.myrpHeldBy != client) then return end
-
-    entity.myrpHeldBy = nil
-
-    local phys = entity:GetPhysicsObject()
-
-    if (IsValid(phys)) then
-        phys:EnableMotion(true)
-        phys:Wake()
-
-        if (shouldThrow and IsValid(client)) then
-            phys:SetVelocity(
-                client:GetAimVector() * 700 + client:GetVelocity()
-            )
-            phys:AddAngleVelocity(VectorRand() * 100)
-        end
+    if (!state) then
+        SendHoldStatus(client, "released")
+        return
     end
+
+    local hands = state.hands
+
+    if (IsValid(hands) and hands:IsHoldingObject()) then
+        hands:DropObject(shouldThrow == true)
+    end
+
+    if (IsValid(client) and client:Alive() and state.previousWeapon and state.previousWeapon != "ix_hands") then
+        timer.Simple(0, function()
+            if (IsValid(client) and client:Alive() and client:HasWeapon(state.previousWeapon)) then
+                client:SelectWeapon(state.previousWeapon)
+            end
+        end)
+    end
+
+    SendHoldStatus(client, "released")
 end
+
+-- Allow Helix hands to use their native physics controller for dropped weapons.
+hook.Add("CanPlayerHoldObject", "MYRP_WeaponInteraction_AllowWeapons", function(client, entity)
+    if (!IsValid(entity)) then return end
+
+    local class = entity:GetClass()
+    if ((entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_") then
+        return true
+    end
+end)
 
 net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
     local operation = net.ReadString()
@@ -202,17 +222,24 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
     local entity = net.ReadEntity()
 
     if (!client:Alive() or !client:GetCharacter() or !IsValid(entity)) then
+        SendHoldStatus(client, "failed")
         return
     end
 
-    if (heldWeapons[client] or IsValid(entity.myrpHeldBy)) then return end
+    if (heldWeapons[client] or IsValid(entity.ixHeldOwner)) then
+        SendHoldStatus(client, "failed")
+        return
+    end
 
     if (client:GetPos():DistToSqr(entity:GetPos()) > 160 * 160) then
+        SendHoldStatus(client, "failed")
         return
     end
 
-    if (client:GetEyeTrace().Entity != entity) then return end
-    if (entity.myrpWeaponInteractionPending) then return end
+    if (client:GetEyeTrace().Entity != entity or entity.myrpWeaponInteractionPending) then
+        SendHoldStatus(client, "failed")
+        return
+    end
 
     local isWeapon = entity:GetClass() == "ix_item"
 
@@ -224,30 +251,43 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
             or string.sub(entity:GetClass(), 1, 7) == "weapon_"
     end
 
-    if (!isWeapon) then return end
-
-    local phys = entity:GetPhysicsObject()
-
-    if (!IsValid(phys)) then
-        Notify(client, "Это оружие нельзя физически поднять.")
+    if (!isWeapon) then
+        SendHoldStatus(client, "failed")
         return
     end
 
-    heldWeapons[client] = entity
-    entity.myrpHeldBy = client
+    local hands = GetHands(client)
 
-    phys:EnableMotion(false)
-    phys:Wake()
+    if (!hands or !hands:CanHoldObject(entity)) then
+        Notify(client, "Это оружие нельзя физически поднять.")
+        SendHoldStatus(client, "failed")
+        return
+    end
+
+    local activeWeapon = client:GetActiveWeapon()
+    local previousWeapon = IsValid(activeWeapon) and activeWeapon:GetClass() or nil
+
+    hands:PickupObject(entity)
+
+    if (!hands:IsHoldingObject()) then
+        SendHoldStatus(client, "failed")
+        return
+    end
+
+    heldWeapons[client] = {
+        entity = entity,
+        hands = hands,
+        previousWeapon = previousWeapon
+    }
+
+    client:SelectWeapon("ix_hands")
+    SendHoldStatus(client, "started")
 end)
 
-hook.Add("Think", "MYRP_WeaponInteraction_PhysicalHold", function()
-    for client, entity in pairs(heldWeapons) do
-        if (!IsValid(client) or !client:Alive() or !IsValid(entity)) then
-            ReleaseWeaponHold(client, false)
-        else
-            local targetPos = client:EyePos() + client:GetAimVector() * 65
-            entity:SetPos(targetPos)
-        end
+-- Do not let weapon switching holster ix_hands while an object is held.
+hook.Add("PlayerSwitchWeapon", "MYRP_WeaponInteraction_LockHands", function(client, oldWeapon, newWeapon)
+    if (heldWeapons[client] and IsValid(oldWeapon) and oldWeapon:GetClass() == "ix_hands") then
+        return true
     end
 end)
 
