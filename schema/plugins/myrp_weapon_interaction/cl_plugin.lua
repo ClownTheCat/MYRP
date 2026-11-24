@@ -4,6 +4,7 @@ local pendingUseEntity
 local pendingUseHasItem = false
 local pendingUseTime = 0
 local physicalHoldActive = false
+local physicalHoldPending = false
 
 local actionNames = {
     "Взять в руки",
@@ -235,17 +236,30 @@ local function SendHoldOperation(operation, entity)
     net.SendToServer()
 end
 
+net.Receive("MYRP_WeaponInteraction_Hold", function()
+    local status = net.ReadString()
+
+    if (status == "started") then
+        physicalHoldPending = false
+        physicalHoldActive = true
+    elseif (status == "failed" or status == "released") then
+        physicalHoldPending = false
+        physicalHoldActive = false
+    end
+end)
+
 hook.Add("Think", "MYRP_PhysicalHold_Client", function()
     if (!IsValid(LocalPlayer()) or !LocalPlayer():Alive()) then return end
 
     if (
         IsValid(pendingUseEntity) and
         !physicalHoldActive and
+        !physicalHoldPending and
         CurTime() - pendingUseTime >= 0.25 and
         input.IsKeyDown(KEY_E)
     ) then
         SendHoldOperation("start", pendingUseEntity)
-        physicalHoldActive = true
+        physicalHoldPending = true
     end
 end)
 
@@ -272,6 +286,7 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
         if (pressed) then
             SendHoldOperation("throw")
             physicalHoldActive = false
+            physicalHoldPending = false
             pendingUseEntity = nil
         end
 
@@ -298,9 +313,10 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
             return
         end
 
-        if (physicalHoldActive) then
+        if (physicalHoldActive or physicalHoldPending) then
             SendHoldOperation("release")
             physicalHoldActive = false
+            physicalHoldPending = false
             pendingUseEntity = nil
             return true
         end
@@ -341,6 +357,34 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
         PlayUI("hover")
         return true
     end
+end)
+
+-- Helix's Weapon Select plugin runs before ordinary hook.Add callbacks.
+-- Wrap its cached callback so MYRP gets first refusal over the wheel binds.
+hook.Add("InitializedPlugins", "MYRP_WeaponInteraction_PatchWeaponSelect", function()
+    local weaponSelect = ix.plugin.Get("wepselect")
+    local callbacks = HOOKS_CACHE and HOOKS_CACHE.PlayerBindPress
+
+    if (!weaponSelect or !callbacks or !callbacks[weaponSelect]) then return end
+
+    local original = callbacks[weaponSelect]
+
+    if (original.myrpWeaponInteractionWrapped) then return end
+
+    local wrapped = function(self, client, bind, pressed)
+        local lowerBind = string.lower(bind or "")
+
+        if (client == LocalPlayer() and pressed and
+            (lowerBind:find("invnext", 1, true) or lowerBind:find("invprev", 1, true)) and
+            IsValid(GetWeaponTarget())) then
+            return true
+        end
+
+        return original(self, client, bind, pressed)
+    end
+
+    wrapped.myrpWeaponInteractionWrapped = true
+    callbacks[weaponSelect] = wrapped
 end)
 
 hook.Add("HUDShouldDraw", "MYRP_WeaponInteraction_HideWeaponSelection", function(name)
