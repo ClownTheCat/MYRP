@@ -7,8 +7,7 @@ local physicalHoldActive = false
 
 local actionNames = {
     "Взять в руки",
-    "Положить в инвентарь",
-    "Grab — поднять физически"
+    "Положить в инвентарь"
 }
 
 local function PlayUI(kind)
@@ -179,7 +178,7 @@ hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
 
     for i = 1, #actionNames do
         local rowY = y + 59 + (i - 1) * 23
-        local enabled = hasItem or i == 3
+        local enabled = hasItem
         local selected = selectedAction == i
 
         if (selected) then
