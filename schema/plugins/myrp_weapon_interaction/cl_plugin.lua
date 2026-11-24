@@ -367,9 +367,9 @@ hook.Add("InitializedPlugins", "MYRP_WeaponInteraction_PatchWeaponSelect", funct
 
     if (!weaponSelect or !callbacks or !callbacks[weaponSelect]) then return end
 
-    local original = callbacks[weaponSelect]
+    if (weaponSelect.myrpWeaponInteractionWrapped) then return end
 
-    if (original.myrpWeaponInteractionWrapped) then return end
+    local original = callbacks[weaponSelect]
 
     local wrapped = function(self, client, bind, pressed)
         local lowerBind = string.lower(bind or "")
@@ -385,6 +385,7 @@ hook.Add("InitializedPlugins", "MYRP_WeaponInteraction_PatchWeaponSelect", funct
 
     wrapped.myrpWeaponInteractionWrapped = true
     callbacks[weaponSelect] = wrapped
+    weaponSelect.myrpWeaponInteractionWrapped = true
 end)
 
 hook.Add("HUDShouldDraw", "MYRP_WeaponInteraction_HideWeaponSelection", function(name)
