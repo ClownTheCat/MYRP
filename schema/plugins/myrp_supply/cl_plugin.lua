@@ -861,7 +861,10 @@ local function FinishFourCornerCalibration(state)
         scaleY = scaleY
     })
     StopCalibration(string.format("Четыре угла обработаны. Панель настроена и сохранена. Scale %.2f.", cfg.scale))
-    PrintCalibration(state.faction)
+    print(string.format(
+        "[MYRP:SUPPLY] %s | offset X %.2f Y %.2f Z %.2f | angle P %.1f Y %.1f R %.1f | scale %.2f | surface=true",
+        state.faction, cfg.x, cfg.y, cfg.z, cfg.pitch, cfg.yaw, cfg.roll, cfg.scale
+    ))
 end
 
 hook.Add("Think", "MYRP.Supply.FourCornerCalibration", function()
