@@ -396,6 +396,27 @@ hook.Add("InitializedPlugins", "MYRP_WeaponInteraction_PatchWeaponSelect", funct
     weaponSelectPatchApplied = true
 end)
 
+-- Hide Helix's default entity tooltip only for weapons handled by MYRP.
+local function IsMYRPWeaponEntity(entity)
+    if (!IsValid(entity)) then return false end
+
+    local class = entity:GetClass()
+
+    if (class == "ix_item") then
+        local item = entity:GetItemTable()
+        return item and item.isWeapon == true or false
+    end
+
+    return (entity.IsWeapon and entity:IsWeapon())
+        or string.sub(class, 1, 7) == "weapon_"
+end
+
+hook.Add("ShouldPopulateEntityInfo", "MYRP_WeaponInteraction_HideHelixWeaponInfo", function(entity)
+    if (IsMYRPWeaponEntity(entity)) then
+        return false
+    end
+end)
+
 hook.Add("HUDShouldDraw", "MYRP_WeaponInteraction_HideWeaponSelection", function(name)
     if (name != "CHudWeaponSelection") then return end
 
