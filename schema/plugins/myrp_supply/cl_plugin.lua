@@ -618,8 +618,8 @@ local function LockCalibrationPlane()
         return
     end
 
-    state.planePosition = state.hitPosition
     state.planeNormal = state.hitAngle:Forward()
+    state.planePosition = state.hitPosition - state.planeNormal * 0.45
     state.planeAngle = state.hitAngle
     state.phase = "placing"
     print("[MYRP:SUPPLY] Плоскость экрана зафиксирована. Теперь двигай курсор по экрану и нажми ЛКМ для установки панели.")
