@@ -2,8 +2,13 @@ PLUGIN.name = "MYRP Weapon Interaction"
 PLUGIN.author = "MYRP"
 PLUGIN.description = "World weapon interactions and player targeting."
 
+local blockedWorldClasses = {
+    gmod_tool = true,
+    weapon_physgun = true
+}
+
 local function CanUseWorldWeapon(item)
-    if (!item or !item.isWeapon or !isstring(item.class)) then
+    if (!item or !item.isWeapon or !isstring(item.class) or blockedWorldClasses[item.class]) then
         return false
     end
 
