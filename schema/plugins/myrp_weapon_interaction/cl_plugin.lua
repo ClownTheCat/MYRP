@@ -129,7 +129,7 @@ hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
 
     local client = LocalPlayer()
 
-    local width, height = 340, 166
+    local width, height = 340, 184
     local x = math.min(ScrW() * 0.5 + 34, ScrW() - width - 18)
     local y = math.min(ScrH() * 0.5 + 34, ScrH() - height - 18)
 
@@ -218,10 +218,18 @@ hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
     end
 
     draw.SimpleText(
-        "Колесо мыши — выбор     E — действие",
+        "Зажми E — физически поднять оружие",
         "DermaDefault",
-        x + 16, y + 145,
-        Color(170, 170, 170),
+        x + 16, y + 132,
+        Color(210, 215, 225),
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP
+    )
+
+    draw.SimpleText(
+        "Колесо — выбор  ·  Короткое E — действие",
+        "DermaDefault",
+        x + 16, y + 151,
+        Color(150, 155, 165),
         TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP
     )
 end)
