@@ -672,6 +672,19 @@ hook.Add("HUDPaint", "MYRP.Supply.SurfaceCalibrationHelp", function()
     end
 end)
 
+local function CalibrationFaction()
+    local client = LocalPlayer()
+    if not IsValid(client) or not client:IsSuperAdmin() then
+        print("[MYRP:SUPPLY] UI calibration is restricted to SuperAdmins.")
+        return
+    end
+
+    local _, faction = TargetTerminal()
+    if faction then return faction end
+    local id = LocalFaction()
+    if id == "combine" or id == "resistance" then return id end
+end
+
 concommand.Add("myrp_supply_ui_calibrate", function()
     if calibrationMode then
         StopCalibration("Режим настройки выключен.")
@@ -694,19 +707,6 @@ concommand.Add("myrp_supply_ui_calibrate", function()
     gui.EnableScreenClicker(true)
     print("[MYRP:SUPPLY] Курсор включён. Наведи его на поверхность монитора и нажми ЛКМ.")
 end)
-
-local function CalibrationFaction()
-    local client = LocalPlayer()
-    if not IsValid(client) or not client:IsSuperAdmin() then
-        print("[MYRP:SUPPLY] UI calibration is restricted to SuperAdmins.")
-        return
-    end
-
-    local _, faction = TargetTerminal()
-    if faction then return faction end
-    local id = LocalFaction()
-    if id == "combine" or id == "resistance" then return id end
-end
 
 concommand.Add("myrp_supply_ui_offset", function(_, _, args)
     local faction = CalibrationFaction()
