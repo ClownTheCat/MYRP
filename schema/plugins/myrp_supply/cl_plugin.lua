@@ -806,7 +806,7 @@ local function FinishFourCornerCalibration(state)
         return
     end
 
-    local normal = right:Cross(up):GetNormalized()
+    local normal = up:Cross(right):GetNormalized()
     local averageNormal = points[1].normal + points[2].normal + points[3].normal + points[4].normal
     if averageNormal:LengthSqr() < 0.001 or normal:Dot(averageNormal:GetNormalized()) < 0.85 then
         StopCalibration("Углы отмечены в неверном порядке или выбраны не на одной поверхности. Начни заново.")
