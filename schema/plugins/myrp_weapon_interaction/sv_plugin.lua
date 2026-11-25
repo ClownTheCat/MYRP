@@ -7,6 +7,33 @@ util.AddNetworkString("MYRP_WeaponInteraction_Action")
 
 local pendingPickups = {}
 
+local blockedWorldClasses = {
+    gmod_tool = true,
+    weapon_physgun = true
+}
+
+local supportedEntityClasses = {
+    item_healthkit = true,
+    item_healthvial = true,
+    item_battery = true,
+    item_ammo_357 = true,
+    item_ammo_357_large = true,
+    item_ammo_ar2 = true,
+    item_ammo_ar2_large = true,
+    item_ammo_smg1 = true,
+    item_ammo_smg1_large = true,
+    item_box_buckshot = true,
+    item_ammo_pistol = true,
+    item_ammo_pistol_large = true,
+    item_ammo_smg1_grenade = true,
+    item_rpg_round = true,
+    item_ammo_crossbow = true,
+    item_ammo_ar2_altfire = true,
+    npc_grenade_frag = true,
+    combine_mine = true,
+    combine_mine_resistance = true
+}
+
 local function FindWeaponItem(class)
     for uniqueID, item in pairs(ix.item.list or {}) do
         if (item.isWeapon and item.class == class) then
@@ -27,6 +54,8 @@ local function IsWeaponEntity(entity)
     if (!IsValid(entity)) then return false end
 
     local class = entity:GetClass()
+    if (blockedWorldClasses[class]) then return false end
+
     return class == "gmod_camera" or (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
 end
 
@@ -36,24 +65,35 @@ local function IsPhysicalWorldObject(entity)
     if (entity.IsVehicle and entity:IsVehicle()) then return false end
 
     local class = entity:GetClass()
-    if (class == "gmod_tool" or class == "ix_item" or IsWeaponEntity(entity)) then return false end
+    if (blockedWorldClasses[class] or class == "ix_item" or IsWeaponEntity(entity)) then return false end
     if (string.StartWith(class, "prop_vehicle") or string.StartWith(class, "vehicle_")) then return false end
     if (string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
 
     local model = entity:GetModel()
-    local physics = entity:GetPhysicsObject()
+    if (!isstring(model) or !util.IsValidModel(model)) then return false end
 
-    return isstring(model) and util.IsValidModel(model)
-        and entity:GetMoveType() == MOVETYPE_VPHYSICS
-        and IsValid(physics)
+    local physics = entity:GetPhysicsObject()
+    return entity:GetMoveType() == MOVETYPE_VPHYSICS and IsValid(physics)
+end
+
+local function IsInventoryWorldObject(entity)
+    if (!IsValid(entity)) then return false end
+
+    local class = entity:GetClass()
+    if (supportedEntityClasses[class]) then
+        local model = entity:GetModel()
+        return isstring(model) and util.IsValidModel(model)
+    end
+
+    return IsPhysicalWorldObject(entity)
 end
 
 local function IsHoldableEntity(entity)
-    if (!IsValid(entity) or entity:GetClass() == "gmod_tool") then return false end
+    if (!IsValid(entity) or blockedWorldClasses[entity:GetClass()]) then return false end
 
     if (entity:GetClass() == "ix_item") then
         local item = entity:GetItemTable()
-        return item and (item.isWeapon or item.uniqueID == "myrp_world_object") or false
+        return item and !blockedWorldClasses[item.class] and (item.isWeapon or item.uniqueID == "myrp_world_object") or false
     end
 
     return IsWeaponEntity(entity) or IsPhysicalWorldObject(entity)
@@ -102,8 +142,8 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
         return
     end
 
-    -- The toolgun is never an interactable world pickup.
-    if (entity:GetClass() == "gmod_tool") then return end
+    -- Toolgun and physgun are never interactable world pickups.
+    if (blockedWorldClasses[entity:GetClass()]) then return end
 
     if (client:GetPos():DistToSqr(entity:GetPos()) > 160 * 160) then
         return
@@ -119,7 +159,7 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     if (entity:GetClass() == "ix_item") then
         local item = entity:GetItemTable()
 
-        if (!item) then return end
+        if (!item or blockedWorldClasses[item.class]) then return end
 
         if (item.uniqueID == "myrp_world_object") then
             if (action == "equip" or action == "store") then
@@ -145,7 +185,7 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
 
     local class = entity:GetClass()
     local isWeapon = IsWeaponEntity(entity)
-    local isWorldObject = IsPhysicalWorldObject(entity)
+    local isWorldObject = IsInventoryWorldObject(entity)
 
     if (!isWeapon and !isWorldObject) then return end
 
@@ -155,7 +195,7 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     if (action == "grab") then
         local hands = GetHands(client)
 
-        if (!hands or !hands:CanHoldObject(entity)) then
+        if (!IsPhysicalWorldObject(entity) or !hands or !hands:CanHoldObject(entity)) then
             Notify(client, "Не получается физически поднять это оружие.")
             return
         end
@@ -318,7 +358,8 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
         return
     end
 
-    if (client:GetEyeTrace().Entity != entity or entity.myrpWeaponInteractionPending) then
+    if (client:GetEyeTrace().Entity != entity or entity.myrpWeaponInteractionPending
+        or blockedWorldClasses[entity:GetClass()]) then
         SendHoldStatus(client, "failed")
         return
     end
