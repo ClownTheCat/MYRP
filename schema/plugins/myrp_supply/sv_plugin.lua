@@ -195,6 +195,7 @@ local function StartOpening(client, crate)
 
     local state = {crate = crate, startedAt = CurTime(), lastUpdate = 0}
     openingPlayers[client] = state
+    SendOpenProgress(client, 0, "started")
 
     timer.Create("MYRP.Supply.Open." .. client:EntIndex(), 0.05, 0, function()
         if not IsValid(client) or not client:Alive() then
@@ -366,8 +367,8 @@ local function SetDropPoint(client, faction)
     end
 
     local trace = client:GetEyeTrace()
-    if not trace.Hit or trace.HitSky then
-        Reply(client, "Наведись на поверхность карты, куда должен прибывать груз.")
+    if not trace.Hit or trace.HitSky or trace.HitNormal.z < 0.55 then
+        Reply(client, "Наведись на пол или достаточно ровную поверхность, куда должен прибывать груз.")
         return
     end
 
