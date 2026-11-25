@@ -287,73 +287,79 @@ local function DrawBootScreen()
     local progress = math.Clamp(elapsed / bootDuration, 0, 1)
     local combine = bootingFaction == "combine"
     local accent = combine and Color(105, 180, 245) or Color(225, 145, 85)
-    local bg = combine and Color(3, 9, 17) or Color(12, 8, 6)
-    draw.RoundedBox(0, 0, 0, ScrW(), ScrH(), bg)
+    local bg = combine and Color(3, 9, 17, 245) or Color(12, 8, 6, 245)
+    local position, angle, scale = GetPanelTransform(bootingTerminal, bootingFaction)
+    local localPosition = bootingTerminal:WorldToLocal(position)
+    local localAngle = bootingTerminal:WorldToLocalAngles(angle)
 
-    local logo = combine and "CMB" or "λ"
-    draw.SimpleText(logo, "MYRP_Supply_Title", ScrW() / 2, ScrH() * 0.23, accent,
-        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-    draw.SimpleText(combine and "CIVIL PROTECTION // SUPPLY NETWORK" or "RESISTANCE // FIELD NETWORK",
-        "MYRP_Supply_Body", ScrW() / 2, ScrH() * 0.23 + 38, color_white,
-        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-    draw.SimpleText("BOOTING MYRP FIELD OPERATING SYSTEM", "MYRP_Supply_Body",
-        ScrW() / 2, ScrH() * 0.34, accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    if imgui.Entity3D2D(bootingTerminal, localPosition, localAngle, scale, 300) then
+        local w, h = 360, 220
+        draw.RoundedBox(2, 0, 0, w, h, bg)
+        surface.SetDrawColor(accent.r, accent.g, accent.b, 210)
+        surface.DrawOutlinedRect(0, 0, w, h, 1)
+        surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
+        surface.DrawRect(1, 1, w - 2, 3)
 
-    local logs = combine and {
-        "[    0.000] CITADEL BIOS v4.2 initializing",
-        "[    0.041] CPU: checking secure execution environment",
-        "[    0.086] memory: 65536 MB detected",
-        "[    0.133] mounting /dev/citadel/root",
-        "[    0.190] [ OK ] kernel image signature verified",
-        "[    0.244] loading combine network drivers",
-        "[    0.301] [ OK ] encrypted uplink established",
-        "[    0.358] starting civil protection subsystem",
-        "[    0.417] loading requisition database",
-        "[    0.476] [ OK ] cargo manifest mounted",
-        "[    0.535] starting supply-daemon.service",
-        "[    0.594] synchronizing local node clock",
-        "[    0.653] [ OK ] radio interception module ready",
-        "[    0.712] checking authorization token",
-        "[    0.771] [ OK ] identity accepted",
-        "[    0.830] starting terminal interface",
-        "[    0.889] [ OK ] all systems operational"
-    } or {
-        "[    0.000] RESISTANCE BIOS initializing",
-        "[    0.041] searching for nearby mesh nodes",
-        "[    0.086] memory: 8192 MB detected",
-        "[    0.133] mounting /dev/resistance/root",
-        "[    0.190] [ OK ] kernel image signature verified",
-        "[    0.244] loading radio relay drivers",
-        "[    0.301] [ OK ] encrypted mesh established",
-        "[    0.358] starting field communications",
-        "[    0.417] loading requisition database",
-        "[    0.476] [ OK ] supply manifest mounted",
-        "[    0.535] starting supplyd.service",
-        "[    0.594] synchronizing relay clock",
-        "[    0.653] [ OK ] resistance channels online",
-        "[    0.712] checking operator credentials",
-        "[    0.771] [ OK ] identity accepted",
-        "[    0.830] starting terminal interface",
-        "[    0.889] [ OK ] all systems operational"
-    }
+        draw.SimpleText(combine and "CMB" or "LAMBDA", "MYRP_Supply_Title",
+            w / 2, 24, accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        draw.SimpleText(combine and "CIVIL PROTECTION // SUPPLY NETWORK" or "RESISTANCE // FIELD NETWORK",
+            "MYRP_Supply_Log", w / 2, 47, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        draw.SimpleText("BOOTING MYRP FIELD OPERATING SYSTEM", "MYRP_Supply_Body",
+            w / 2, 69, accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
-    local visibleLines = math.min(#logs, math.floor(elapsed * 5) + 1)
-    local first = math.max(1, visibleLines - 9)
-    local startY = ScrH() * 0.48
-    for i = first, visibleLines do
-        local lineIndex = i
-        local alpha = i == visibleLines and 255 or 175
-        draw.SimpleText(logs[lineIndex], "MYRP_Supply_Log", ScrW() / 2, startY + (i - first) * 17,
-            Color(accent.r, accent.g, accent.b, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        local logs = combine and {
+            "[    0.000] CITADEL BIOS v4.2 initializing",
+            "[    0.041] CPU: checking secure execution environment",
+            "[    0.086] memory: 65536 MB detected",
+            "[    0.133] mounting /dev/citadel/root",
+            "[    0.190] [ OK ] kernel image signature verified",
+            "[    0.244] loading combine network drivers",
+            "[    0.301] [ OK ] encrypted uplink established",
+            "[    0.358] starting civil protection subsystem",
+            "[    0.417] loading requisition database",
+            "[    0.476] [ OK ] cargo manifest mounted",
+            "[    0.535] starting supply-daemon.service",
+            "[    0.594] synchronizing local node clock",
+            "[    0.653] [ OK ] radio interception module ready",
+            "[    0.712] checking authorization token",
+            "[    0.771] [ OK ] identity accepted",
+            "[    0.830] starting terminal interface",
+            "[    0.889] [ OK ] all systems operational"
+        } or {
+            "[    0.000] RESISTANCE BIOS initializing",
+            "[    0.041] searching for nearby mesh nodes",
+            "[    0.086] memory: 8192 MB detected",
+            "[    0.133] mounting /dev/resistance/root",
+            "[    0.190] [ OK ] kernel image signature verified",
+            "[    0.244] loading radio relay drivers",
+            "[    0.301] [ OK ] encrypted mesh established",
+            "[    0.358] starting field communications",
+            "[    0.417] loading requisition database",
+            "[    0.476] [ OK ] supply manifest mounted",
+            "[    0.535] starting supplyd.service",
+            "[    0.594] synchronizing relay clock",
+            "[    0.653] [ OK ] resistance channels online",
+            "[    0.712] checking operator credentials",
+            "[    0.771] [ OK ] identity accepted",
+            "[    0.830] starting terminal interface",
+            "[    0.889] [ OK ] all systems operational"
+        }
+
+        local visibleLines = math.min(#logs, math.floor(elapsed * 5) + 1)
+        local first = math.max(1, visibleLines - 5)
+        for i = first, visibleLines do
+            local alpha = i == visibleLines and 230 or 135
+            draw.SimpleText(logs[i], "MYRP_Supply_Log", 13, 91 + (i - first) * 12,
+                Color(accent.r, accent.g, accent.b, alpha))
+        end
+
+        local barX, barY, barW = 13, 184, w - 26
+        draw.RoundedBox(2, barX, barY, barW, 5, Color(70, 80, 90, 140))
+        draw.RoundedBox(2, barX, barY, barW * progress, 5, accent)
+        draw.SimpleText(string.format("INITIALIZING... %d%%", math.floor(progress * 100)),
+            "MYRP_Supply_Log", w / 2, 201, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+        imgui.End3D2D()
     end
-
-    local barW = math.min(520, ScrW() * 0.55)
-    local barX = (ScrW() - barW) / 2
-    local barY = ScrH() * 0.82
-    draw.RoundedBox(2, barX, barY, barW, 5, Color(70, 80, 90, 140))
-    draw.RoundedBox(2, barX, barY, barW * progress, 5, accent)
-    draw.SimpleText(string.format("INITIALIZING... %d%%", math.floor(progress * 100)),
-        "MYRP_Supply_Log", ScrW() / 2, barY + 20, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
     if progress >= 1 then
         terminalBooted[bootingTerminal] = true
@@ -369,7 +375,11 @@ local function DrawBootScreen()
 end
 
 hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.TerminalPanel3D2D", function(_, drawingSkybox)
-    if drawingSkybox or IsValid(bootingTerminal) then return end
+    if drawingSkybox then return end
+    if IsValid(bootingTerminal) then
+        DrawBootScreen()
+        return
+    end
     local drawEntity = calibrationMode and calibrationMode.entity or activeTerminal
     if not IsValid(drawEntity) then return end
 
@@ -381,10 +391,7 @@ end)
 
 hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
     if calibrationMode then return end
-    if IsValid(bootingTerminal) then
-        DrawBootScreen()
-        return
-    end
+    if IsValid(bootingTerminal) then return end
 
     local entity, faction = TargetTerminal()
     if not IsValid(entity) then
