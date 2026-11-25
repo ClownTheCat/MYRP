@@ -1,4 +1,8 @@
+MYRP = MYRP or {}
+MYRP.Supply = MYRP.Supply or {}
+
 local imgui = {}
+MYRP.Supply.imgui = imgui
 
 imgui.skin = {
 	background = Color(0, 0, 0, 0),
