@@ -41,7 +41,16 @@ if SERVER then
             return
         end
 
-        return DenyBuildAction(client, "prop")
+        if (IsValid(client)) then
+            print(string.format(
+                "[MYRP:ADMIN_BUILD][SERVER][DENY] player=%s steamid=%s group=%s action=prop",
+                client:Nick(),
+                client:SteamID(),
+                client:GetUserGroup()
+            ))
+        end
+
+        return false
     end)
 
     local spawnHooks = {
