@@ -156,14 +156,61 @@ hook.Add("CreateEntityRagdoll", "MYRP_CorpseLooting_CreateRagdoll", function(cli
     end)
 end)
 
+local function CreateFallbackRagdoll(client)
+    local ragdoll = client:GetRagdollEntity()
+
+    if (IsValid(ragdoll)) then
+        return ragdoll
+    end
+
+    local model = client:GetModel()
+
+    if (not isstring(model) or not util.IsValidModel(model)) then
+        return
+    end
+
+    ragdoll = ents.Create("prop_ragdoll")
+
+    if (not IsValid(ragdoll)) then
+        return
+    end
+
+    ragdoll:SetModel(model)
+    ragdoll:SetPos(client:GetPos())
+    ragdoll:SetAngles(client:GetAngles())
+    ragdoll:SetSkin(client:GetSkin() or 0)
+
+    for group = 0, client:GetNumBodyGroups() - 1 do
+        ragdoll:SetBodygroup(group, client:GetBodygroup(group))
+    end
+
+    ragdoll:Spawn()
+    ragdoll:Activate()
+    ragdoll:SetUseType(SIMPLE_USE)
+
+    local velocity = client:GetVelocity()
+
+    for bone = 0, ragdoll:GetPhysicsObjectCount() - 1 do
+        local physics = ragdoll:GetPhysicsObjectNum(bone)
+
+        if (IsValid(physics)) then
+            physics:SetVelocity(velocity)
+        end
+    end
+
+    return ragdoll
+end
+
 hook.Add("PlayerDeath", "MYRP_CorpseLooting_DeathFallback", function(client)
-    timer.Simple(0.2, function()
+    timer.Simple(0.1, function()
         if (not IsValid(client)) then return end
 
-        local ragdoll = client:GetRagdollEntity()
+        local ragdoll = CreateFallbackRagdoll(client)
 
         if (IsValid(ragdoll)) then
             MoveInventoryToCorpse(client, ragdoll)
+        else
+            print("[MYRP:CORPSES] Не удалось создать ragdoll для " .. client:Nick())
         end
     end)
 end)
@@ -178,24 +225,30 @@ hook.Add("PlayerSpawn", "MYRP_CorpseLooting_TestBotInventory", function(client)
     end)
 end)
 
-hook.Add("PlayerUse", "MYRP_CorpseLooting_Use", function(client, entity)
+local function TryOpenCorpseInventory(client, entity)
     if (not IsValid(client) or not client:Alive() or not client:GetCharacter()) then
-        return
+        return false
     end
 
     if (not IsValid(entity) or entity:GetClass() != "prop_ragdoll") then
-        return
+        return false
     end
 
     local inventory = entity.ixMYRPCorpseInventory
 
-    if (not inventory) then
-        return
+    if (not inventory or not inventory.GetID) then
+        return false
     end
 
     if (client:GetPos():DistToSqr(entity:GetPos()) > USE_DISTANCE * USE_DISTANCE) then
         return false
     end
+
+    if (client.ixOpenStorage == inventory or (client.ixMYRPCorpseUseCooldown or 0) > CurTime()) then
+        return true
+    end
+
+    client.ixMYRPCorpseUseCooldown = CurTime() + 0.5
 
     ix.storage.Open(client, inventory, {
         entity = entity,
@@ -203,7 +256,26 @@ hook.Add("PlayerUse", "MYRP_CorpseLooting_Use", function(client, entity)
         bMultipleUsers = true
     })
 
-    return false
+    return true
+end
+
+hook.Add("PlayerUse", "MYRP_CorpseLooting_Use", function(client, entity)
+    if (TryOpenCorpseInventory(client, entity)) then
+        return false
+    end
+end)
+
+-- Some ragdolls do not dispatch PlayerUse reliably; handle the E key directly too.
+hook.Add("KeyPress", "MYRP_CorpseLooting_KeyPress", function(client, key)
+    if (key != IN_USE or not IsValid(client) or not client:Alive()) then
+        return
+    end
+
+    local trace = client:GetEyeTrace()
+
+    if (IsValid(trace.Entity) and TryOpenCorpseInventory(client, trace.Entity)) then
+        return true
+    end
 end)
 
 hook.Add("PlayerDisconnected", "MYRP_CorpseLooting_TestBotCleanup", function(client)
