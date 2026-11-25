@@ -88,8 +88,14 @@ local function IsInventoryWorldObject(entity)
     return IsPhysicalWorldObject(entity)
 end
 
+local function IsCorpseEntity(entity)
+    return IsValid(entity) and entity:GetClass() == "prop_ragdoll"
+        and entity:GetNW2Bool("myrp_corpse", false)
+end
+
 local function IsHoldableEntity(entity)
     if (!IsValid(entity) or blockedWorldClasses[entity:GetClass()]) then return false end
+    if (IsCorpseEntity(entity)) then return true end
 
     if (entity:GetClass() == "ix_item") then
         local item = entity:GetItemTable()
@@ -152,6 +158,28 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     local trace = client:GetEyeTrace()
 
     if (trace.Entity != entity) then
+        return
+    end
+
+    -- MYRP corpse actions use the same interaction menu as weapons.
+    if (IsCorpseEntity(entity)) then
+        if (action != "pockets") then return end
+
+        local inventory = entity.ixMYRPCorpseInventory
+
+        if (!inventory or !inventory.GetID) then
+            Notify(client, "В карманах ничего нет или тело ещё обыскивают.")
+            return
+        end
+
+        if (client.ixOpenStorage == inventory) then return end
+
+        ix.storage.Open(client, inventory, {
+            entity = entity,
+            name = "Обыск тела",
+            bMultipleUsers = true
+        })
+
         return
     end
 
@@ -325,7 +353,7 @@ hook.Add("CanPlayerHoldObject", "MYRP_WeaponInteraction_AllowWeapons", function(
         return false
     end
 
-    if (IsHoldableEntity(entity)) then
+    if (IsCorpseEntity(entity) or IsHoldableEntity(entity)) then
         return true
     end
 end)
