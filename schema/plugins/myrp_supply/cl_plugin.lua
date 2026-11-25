@@ -807,10 +807,21 @@ local function FinishFourCornerCalibration(state)
     end
 
     local normal = up:Cross(right):GetNormalized()
-    local averageNormal = points[1].normal + points[2].normal + points[3].normal + points[4].normal
-    if averageNormal:LengthSqr() < 0.001 or normal:Dot(averageNormal:GetNormalized()) < 0.85 then
-        StopCalibration("Углы отмечены в неверном порядке или выбраны не на одной поверхности. Начни заново.")
-        return
+    -- Use the first hit normal only to choose the outward direction.
+    -- Individual mesh triangles may have slightly different normals even
+    -- when all four points belong to the same visible monitor surface.
+    if normal:Dot(points[1].normal) < 0 then
+        normal = -normal
+    end
+
+    -- Validate the actual point geometry instead of comparing triangle normals.
+    -- A small tolerance allows minor mesh irregularities on the monitor glass.
+    for _, point in ipairs(points) do
+        local deviation = math.abs((point.position - topLeft):Dot(normal))
+        if deviation > 4 then
+            StopCalibration("Углы не лежат на одной плоскости. Проверь, что выбраны именно четыре угла экрана.")
+            return
+        end
     end
 
     local width = (topLeft:Distance(topRight) + bottomLeft:Distance(bottomRight)) * 0.5
@@ -893,11 +904,6 @@ hook.Add("Think", "MYRP.Supply.FourCornerCalibration", function()
         local position, normal = GetCalibrationCursorHit(state)
         if not position then
             print("[MYRP:SUPPLY] Курсор должен попадать непосредственно в экран этого монитора.")
-            return
-        end
-
-        if #state.points > 0 and normal:Dot(state.points[1].normal) < 0.85 then
-            print("[MYRP:SUPPLY] Эта точка находится на другой плоскости. Выбирай все четыре угла на стекле экрана.")
             return
         end
 
