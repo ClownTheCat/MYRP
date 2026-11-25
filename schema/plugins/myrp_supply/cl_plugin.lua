@@ -104,13 +104,16 @@ end
 
 local function GetPanelTransform(entity, faction)
     local cfg = Config(faction)
-    local client = LocalPlayer()
-    local base = entity:LocalToWorld(entity:OBBCenter() + Vector(cfg.x, cfg.y, cfg.z))
-    local towardPlayer = (client:EyePos() - base):GetNormalized()
-    local position = base + towardPlayer * 5
-    local angle = towardPlayer:Angle()
-    angle:RotateAroundAxis(angle:Forward(), 90)
-    angle:RotateAroundAxis(angle:Right(), 90)
+
+    -- Keep the interface fixed to the terminal model instead of turning it
+    -- toward the player. Offsets are entity-local so calibration follows
+    -- the monitor when it is moved or rotated.
+    local position = entity:LocalToWorld(entity:OBBCenter() + Vector(cfg.x, cfg.y, cfg.z))
+    local angle = entity:GetAngles()
+
+    -- Rotate the screen around its own normal for fine alignment.
+    angle:RotateAroundAxis(angle:Forward(), tonumber(cfg.rotation) or 0)
+
     return position, angle, math.Clamp(tonumber(cfg.scale) or 1, 0.5, 1.8) * 0.075
 end
 
