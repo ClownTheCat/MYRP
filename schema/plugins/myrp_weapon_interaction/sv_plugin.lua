@@ -38,7 +38,7 @@ local function IsPhysicalWorldObject(entity)
     local class = entity:GetClass()
     if (class == "ix_item" or IsWeaponEntity(entity)) then return false end
     if (string.StartWith(class, "prop_vehicle") or string.StartWith(class, "vehicle_")) then return false end
-    if (string.StartWith(class, "gmod_") or string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
+    if (string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
 
     local model = entity:GetModel()
     local physics = entity:GetPhysicsObject()
