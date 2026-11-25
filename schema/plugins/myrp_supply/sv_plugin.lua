@@ -4,6 +4,8 @@ util.AddNetworkString("MYRP_Supply_Request")
 util.AddNetworkString("MYRP_Supply_OpenStart")
 util.AddNetworkString("MYRP_Supply_OpenStop")
 util.AddNetworkString("MYRP_Supply_OpenProgress")
+util.AddNetworkString("MYRP_Supply_StatusRequest")
+util.AddNetworkString("MYRP_Supply_Status")
 
 local SUPPLY = MYRP.Supply
 local cooldowns = {}
@@ -221,6 +223,33 @@ local function StartOpening(client, crate)
         end
     end)
 end
+
+local function SendSupplyStatus(client, faction)
+    if not IsValid(client) then return end
+
+    local nextAllowed = cooldowns[faction] or 0
+    local remaining = math.max(0, nextAllowed - CurTime())
+    local available = remaining <= 0 and not IsValid(activeCrates[faction])
+
+    net.Start("MYRP_Supply_Status")
+        net.WriteBool(available)
+        net.WriteFloat(remaining)
+        net.WriteBool(IsValid(activeCrates[faction]))
+    net.Send(client)
+end
+
+net.Receive("MYRP_Supply_StatusRequest", function(_, client)
+    local terminal = net.ReadEntity()
+    if not IsValid(client) or not IsLookingAt(client, terminal, 180) then return end
+
+    local terminalFaction = GetTerminalFaction(terminal)
+    if not terminalFaction or GetFactionID(client) ~= terminalFaction then
+        SendSupplyStatus(client, terminalFaction or "combine")
+        return
+    end
+
+    SendSupplyStatus(client, terminalFaction)
+end)
 
 net.Receive("MYRP_Supply_Request", function(_, client)
     local terminal = net.ReadEntity()
