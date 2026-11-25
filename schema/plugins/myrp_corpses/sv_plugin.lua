@@ -303,4 +303,22 @@ hook.Add("InitializedPlugins", "MYRP_CorpseLooting_CleanupOldInventories", funct
     query:Execute()
 end)
 
+concommand.Add("myrp_corpse_list", function(client)
+    if (IsValid(client) and not client:IsAdmin()) then return end
+
+    local count = 0
+    for _, entity in ipairs(ents.FindByClass("prop_ragdoll")) do
+        if (entity:GetNW2Bool("myrp_corpse", false)) then
+            count = count + 1
+            MsgN("[MYRP:CORPSES][LIST] ent=" .. entity:EntIndex()
+                .. ", name=" .. entity:GetNW2String("myrp_corpse_name", "<none>")
+                .. ", inventory=" .. tostring(entity.ixMYRPCorpseInventory
+                    and entity.ixMYRPCorpseInventory:GetID() or "nil")
+                .. ", creating=" .. tostring(entity.ixMYRPCorpseInventoryCreating == true))
+        end
+    end
+
+    MsgN("[MYRP:CORPSES][LIST] marked corpses=" .. count)
+end)
+
 print("[MYRP:CORPSES][SERVER] Corpse looting loaded.")
