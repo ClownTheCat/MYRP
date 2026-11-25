@@ -421,6 +421,7 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
             physicalHoldActive = false
             physicalHoldPending = false
             pendingUseEntity = nil
+            pendingUseIsCorpse = false
         end
 
         return true
