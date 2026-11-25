@@ -18,6 +18,29 @@ local function PlayUI(kind)
     end
 end
 
+local function IsWeaponEntity(entity)
+    if (!IsValid(entity)) then return false end
+
+    local class = entity:GetClass()
+    return (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
+end
+
+local function IsPhysicalWorldObject(entity)
+    if (!IsValid(entity) or entity:IsPlayer() or entity:IsNPC()) then return false end
+    if (entity.IsNextBot and entity:IsNextBot()) then return false end
+    if (entity.IsVehicle and entity:IsVehicle()) then return false end
+
+    local class = entity:GetClass()
+    if (class == "ix_item" or IsWeaponEntity(entity)) then return false end
+    if (string.StartWith(class, "prop_vehicle") or string.StartWith(class, "vehicle_")) then return false end
+    if (string.StartWith(class, "gmod_") or string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
+
+    local physics = entity:GetPhysicsObject()
+    return isstring(entity:GetModel()) and util.IsValidModel(entity:GetModel())
+        and entity:GetMoveType() == MOVETYPE_VPHYSICS
+        and IsValid(physics)
+end
+
 local function GetWeaponTarget()
     local client = LocalPlayer()
 
@@ -39,20 +62,13 @@ local function GetWeaponTarget()
     if (class == "ix_item") then
         local item = entity:GetItemTable()
 
-        if (!item or !item.isWeapon) then
+        if (!item or (!item.isWeapon and item.uniqueID != "myrp_world_object")) then
             return
         end
 
-        itemName = item.name or "Оружие"
+        itemName = item:GetName() or "Предмет"
         hasItem = true
-    else
-        local isWeapon = (entity.IsWeapon and entity:IsWeapon())
-            or string.sub(class, 1, 7) == "weapon_"
-
-        if (!isWeapon) then
-            return
-        end
-
+    elseif (IsWeaponEntity(entity)) then
         for _, item in pairs(ix.item.list or {}) do
             if (item.isWeapon and item.class == class) then
                 itemName = item.name
@@ -69,6 +85,11 @@ local function GetWeaponTarget()
                 itemName = language.GetPhrase(string.sub(itemName, 2))
             end
         end
+    elseif (IsPhysicalWorldObject(entity)) then
+        itemName = entity.PrintName or "Физический предмет"
+        hasItem = true
+    else
+        return
     end
 
     return entity, itemName, hasItem
@@ -468,7 +489,7 @@ local function IsMYRPWeaponEntity(entity)
 
     if (class == "ix_item") then
         local item = entity:GetItemTable()
-        return item and item.isWeapon == true or false
+        return item and (item.isWeapon == true or item.uniqueID == "myrp_world_object") or false
     end
 
     return (entity.IsWeapon and entity:IsWeapon())
