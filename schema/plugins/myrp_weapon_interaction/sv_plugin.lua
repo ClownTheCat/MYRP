@@ -27,7 +27,7 @@ local function IsWeaponEntity(entity)
     if (!IsValid(entity)) then return false end
 
     local class = entity:GetClass()
-    return (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
+    return class == "gmod_camera" or (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
 end
 
 local function IsPhysicalWorldObject(entity)
@@ -36,7 +36,7 @@ local function IsPhysicalWorldObject(entity)
     if (entity.IsVehicle and entity:IsVehicle()) then return false end
 
     local class = entity:GetClass()
-    if (class == "ix_item" or IsWeaponEntity(entity)) then return false end
+    if (class == "gmod_tool" or class == "ix_item" or IsWeaponEntity(entity)) then return false end
     if (string.StartWith(class, "prop_vehicle") or string.StartWith(class, "vehicle_")) then return false end
     if (string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
 
@@ -49,7 +49,7 @@ local function IsPhysicalWorldObject(entity)
 end
 
 local function IsHoldableEntity(entity)
-    if (!IsValid(entity)) then return false end
+    if (!IsValid(entity) or entity:GetClass() == "gmod_tool") then return false end
 
     if (entity:GetClass() == "ix_item") then
         local item = entity:GetItemTable()
@@ -101,6 +101,9 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     if (!IsValid(client) or !client:GetCharacter() or !IsValid(entity)) then
         return
     end
+
+    -- The toolgun is never an interactable world pickup.
+    if (entity:GetClass() == "gmod_tool") then return end
 
     if (client:GetPos():DistToSqr(entity:GetPos()) > 160 * 160) then
         return
