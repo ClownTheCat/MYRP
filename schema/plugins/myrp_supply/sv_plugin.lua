@@ -440,12 +440,39 @@ local function SetDropPoint(client, faction)
     Log("INFO", client:Nick() .. " set " .. faction .. " drop point to " .. tostring(trace.HitPos))
 end
 
-concommand.Add("myrp_supply_set_combine", function(client)
-    SetDropPoint(client, "combine")
+local function FindPlayerByIdentifier(identifier)
+    if not isstring(identifier) or identifier == "" then return nil end
+    identifier = string.lower(identifier)
+
+    for _, target in ipairs(player.GetAll()) do
+        if IsValid(target) then
+            if string.lower(target:SteamID()) == identifier
+                or string.lower(target:SteamID64()) == identifier
+                or string.lower(target:Nick()) == identifier then
+                return target
+            end
+        end
+    end
+end
+
+local function ResolvePointCommandPlayer(client, args)
+    if IsValid(client) then return client end
+
+    local target = FindPlayerByIdentifier(args and args[1])
+    if not IsValid(target) then
+        Reply(nil, "Из серверной консоли укажи SteamID64 SuperAdmin: <команда> <SteamID64>.")
+        return
+    end
+
+    return target
+end
+
+concommand.Add("myrp_supply_set_combine", function(client, _, args)
+    SetDropPoint(ResolvePointCommandPlayer(client, args), "combine")
 end)
 
-concommand.Add("myrp_supply_set_resistance", function(client)
-    SetDropPoint(client, "resistance")
+concommand.Add("myrp_supply_set_resistance", function(client, _, args)
+    SetDropPoint(ResolvePointCommandPlayer(client, args), "resistance")
 end)
 
 concommand.Add("myrp_supply_show_points", function(client)
