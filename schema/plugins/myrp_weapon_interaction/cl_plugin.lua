@@ -22,7 +22,7 @@ local function IsWeaponEntity(entity)
     if (!IsValid(entity)) then return false end
 
     local class = entity:GetClass()
-    return (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
+    return class == "gmod_camera" or (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
 end
 
 local function IsPhysicalWorldObject(entity)
@@ -31,7 +31,7 @@ local function IsPhysicalWorldObject(entity)
     if (entity.IsVehicle and entity:IsVehicle()) then return false end
 
     local class = entity:GetClass()
-    if (class == "ix_item" or IsWeaponEntity(entity)) then return false end
+    if (class == "gmod_tool" or class == "ix_item" or IsWeaponEntity(entity)) then return false end
     if (string.StartWith(class, "prop_vehicle") or string.StartWith(class, "vehicle_")) then return false end
     if (string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
 
@@ -56,6 +56,8 @@ local function GetWeaponTarget()
     end
 
     local class = entity:GetClass()
+    if (class == "gmod_tool") then return end
+
     local itemName
     local hasItem = false
 
