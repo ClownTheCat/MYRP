@@ -255,12 +255,13 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
 
     entity.myrpWeaponInteractionPending = token
 
-    local x, y, inventoryID = inventory:Add(uniqueID, 1, data)
+    -- Helix inventory:Add returns the created item (or nil), not x/y/inventoryID.
+    local addedItem = inventory:Add(uniqueID, 1, data)
 
-    if (!x or !y or !inventoryID) then
+    if (!addedItem) then
         pendingPickups[token] = nil
         entity.myrpWeaponInteractionPending = nil
-        Notify(client, "Не удалось подобрать оружие. Возможно, в инвентаре нет места.")
+        Notify(client, "Не удалось подобрать предмет. Возможно, в инвентаре нет места.")
         return
     end
 end)
