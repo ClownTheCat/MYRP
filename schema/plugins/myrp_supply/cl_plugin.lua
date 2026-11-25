@@ -164,7 +164,7 @@ local function DrawTerminal(entity, faction)
     draw.RoundedBox(2, bx, by, bw, bh, Color(button.r, button.g, button.b, canRequest and 42 or 18))
     surface.SetDrawColor(button.r, button.g, button.b, canRequest and 210 or 75)
     surface.DrawOutlinedRect(bx, by, bw, bh, 1)
-    draw.SimpleText(canRequest and "[ E ]  REQUEST SUPPLY" or "[ E ]  REQUEST LOCKED",
+    draw.SimpleText(canRequest and "[ E ]  ЗАПРОСИТЬ ГРУЗ" or "[ E ]  ЗАПРОС НЕДОСТУПЕН",
         "MYRP_Supply_Body", bx + bw / 2, by + bh / 2, canRequest and bright or Color(130, 140, 150),
         TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
@@ -294,8 +294,24 @@ hook.Add("HUDPaint", "MYRP.Supply.CrateInteraction", function()
     lastCrateUse = down
 end)
 
-hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.CrateFactionOutline", function()
+local cachedSupplyCrates = {}
+
+timer.Create("MYRP.Supply.CacheCrates", 0.5, 0, function()
+    local found = {}
     for _, entity in ipairs(ents.FindByClass("prop_physics")) do
+        local faction = entity:GetNW2String("MYRP_SupplyFaction", "")
+        if faction == "combine" or faction == "resistance" then
+            found[entity] = true
+        end
+    end
+    cachedSupplyCrates = found
+end)
+
+hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.CrateFactionOutline", function()
+    for entity in pairs(cachedSupplyCrates) do
+        if not IsValid(entity) then
+            cachedSupplyCrates[entity] = nil
+        else
         local faction = entity:GetNW2String("MYRP_SupplyFaction", "")
         if faction == "combine" or faction == "resistance" then
             local color = faction == "combine" and Color(75, 165, 255) or Color(235, 135, 75)
@@ -303,6 +319,7 @@ hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.CrateFactionOutline", fu
             render.SetColorMaterial()
             render.DrawWireframeBox(entity:GetPos(), entity:GetAngles(), entity:OBBMins(), entity:OBBMaxs(), color, true)
             cam.IgnoreZ(false)
+        end
         end
     end
 end)
