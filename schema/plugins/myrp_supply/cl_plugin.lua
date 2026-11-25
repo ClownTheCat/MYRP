@@ -100,28 +100,22 @@ local function LocalFaction()
     return MYRP.UI and MYRP.UI.GetFactionID and MYRP.UI.GetFactionID(LocalPlayer()) or "neutral"
 end
 
+local TERMINAL_PANEL_DISTANCE = 512 -- около 10 метров
+
 local function TargetTerminal()
     local client = LocalPlayer()
     if not IsValid(client) or not client:Alive() then return end
 
-    local traceEntity = client:GetEyeTrace().Entity
-    local traceFaction = FactionForModel(traceEntity)
-    if traceFaction and client:GetPos():DistToSqr(traceEntity:GetPos()) <= 220 * 220 then
-        return traceEntity, traceFaction
-    end
-
-    -- While aiming at the floating 3D2D menu, the eye trace hits empty space
-    -- instead of the physical monitor. Keep the nearest terminal in the aim cone active.
-    local aim = client:GetAimVector()
+    -- Показываем панель ближайшего терминала в радиусе, независимо от направления взгляда.
     local bestEntity, bestFaction
-    local bestDot = 0.94
-    for _, entity in ipairs(ents.FindInSphere(client:GetPos(), 220)) do
+    local bestDistanceSqr = TERMINAL_PANEL_DISTANCE * TERMINAL_PANEL_DISTANCE
+
+    for _, entity in ipairs(ents.FindInSphere(client:GetPos(), TERMINAL_PANEL_DISTANCE)) do
         local faction = FactionForModel(entity)
         if faction then
-            local direction = (entity:WorldSpaceCenter() - client:EyePos()):GetNormalized()
-            local dot = aim:Dot(direction)
-            if dot > bestDot then
-                bestDot = dot
+            local distanceSqr = client:GetPos():DistToSqr(entity:GetPos())
+            if distanceSqr <= bestDistanceSqr then
+                bestDistanceSqr = distanceSqr
                 bestEntity = entity
                 bestFaction = faction
             end
