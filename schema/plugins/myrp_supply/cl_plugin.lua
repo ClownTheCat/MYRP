@@ -709,6 +709,12 @@ hook.Add("HUDPaint", "MYRP.Supply.SurfaceCalibrationHelp", function()
             "Плоскость зафиксирована — двигай курсор по экрану",
             "ЛКМ — установить панель    ПКМ — отмена"
         }
+    elseif state.phase == "corners" then
+        lines = {
+            "MYRP // FOUR-CORNER CALIBRATION",
+            "Укажи углы экрана по порядку: верхний левый, верхний правый, нижний правый, нижний левый",
+            "ЛКМ — отметить угол    ПКМ — отмена"
+        }
     else
         lines = {
             "MYRP // SURFACE CALIBRATION",
@@ -764,6 +770,174 @@ concommand.Add("myrp_supply_ui_calibrate", function()
     calibrationMode = {entity = entity, faction = faction, phase = "selecting"}
     gui.EnableScreenClicker(true)
     print("[MYRP:SUPPLY] Курсор включён. Наведи его на экран монитора и нажми ЛКМ, чтобы зафиксировать плоскость.")
+end)
+
+-- Four-corner calibration: derive the 3D2D origin, orientation and scale
+-- directly from four points clicked on the monitor's visible screen surface.
+local function GetCalibrationCursorHit(state)
+    local client = LocalPlayer()
+    if not IsValid(client) then return end
+
+    local mx, my = gui.MousePos()
+    if mx < 0 or my < 0 then return end
+
+    local origin = client:EyePos()
+    local direction = gui.ScreenToVector(mx, my)
+    local trace = util.TraceLine({
+        start = origin,
+        endpos = origin + direction * 1200,
+        filter = client
+    })
+
+    if trace.Hit and trace.Entity == state.entity then
+        return trace.HitPos, trace.HitNormal:GetNormalized()
+    end
+end
+
+local function FinishFourCornerCalibration(state)
+    local points = state.points
+    local topLeft, topRight = points[1].position, points[2].position
+    local bottomRight, bottomLeft = points[3].position, points[4].position
+
+    local right = ((topRight - topLeft) + (bottomRight - bottomLeft)):GetNormalized()
+    local up = ((topLeft - bottomLeft) + (topRight - bottomRight)):GetNormalized()
+    if right:LengthSqr() < 0.9 or up:LengthSqr() < 0.9 then
+        StopCalibration("Не удалось определить оси экрана. Попробуй отметить четыре угла ещё раз.")
+        return
+    end
+
+    local normal = right:Cross(up):GetNormalized()
+    local averageNormal = points[1].normal + points[2].normal + points[3].normal + points[4].normal
+    if averageNormal:LengthSqr() < 0.001 or normal:Dot(averageNormal:GetNormalized()) < 0.85 then
+        StopCalibration("Углы отмечены в неверном порядке или выбраны не на одной поверхности. Начни заново.")
+        return
+    end
+
+    local width = (topLeft:Distance(topRight) + bottomLeft:Distance(bottomRight)) * 0.5
+    local height = (topLeft:Distance(bottomLeft) + topRight:Distance(bottomRight)) * 0.5
+    if width < 5 or height < 5 then
+        StopCalibration("Получился слишком маленький экран. Отметь углы ещё раз.")
+        return
+    end
+
+    local scaleX = width / 360 / 0.075
+    local scaleY = height / 220 / 0.075
+    local scale = (scaleX + scaleY) * 0.5
+    if math.abs(scaleX - scaleY) / math.max(scaleX, scaleY) > 0.2 then
+        print("[MYRP:SUPPLY] Внимание: пропорции отмеченной области отличаются от интерфейса более чем на 20%. Проверь, что нажал именно внутренние углы стекла.")
+    end
+
+    local angle = SurfaceAngleFromNormal(normal)
+    local targetUp = up - normal * up:Dot(normal)
+    targetUp:Normalize()
+    local currentUp = angle:Up()
+    local roll = math.deg(math.atan2(normal:Dot(currentUp:Cross(targetUp)), currentUp:Dot(targetUp)))
+    angle:RotateAroundAxis(normal, roll)
+
+    if angle:Right():Dot(right) < 0 then
+        angle:RotateAroundAxis(normal, 180)
+    end
+
+    local entity = state.entity
+    local origin = topLeft + normal * 0.45
+    local localPosition = entity:WorldToLocal(origin) - entity:OBBCenter()
+    local localAngle = entity:WorldToLocalAngles(angle)
+    local cfg = Config(state.faction)
+
+    cfg.x, cfg.y, cfg.z = localPosition.x, localPosition.y, localPosition.z
+    cfg.pitch, cfg.yaw, cfg.roll = localAngle.p, localAngle.y, localAngle.r
+    cfg.scale = math.Clamp(scale, 0.5, 1.8)
+    cfg.surface = true
+
+    SaveConfig(state.faction)
+    PrintTable({
+        topLeft = topLeft,
+        topRight = topRight,
+        bottomRight = bottomRight,
+        bottomLeft = bottomLeft,
+        width = width,
+        height = height,
+        scaleX = scaleX,
+        scaleY = scaleY
+    })
+    StopCalibration(string.format("Четыре угла обработаны. Панель настроена и сохранена. Scale %.2f.", cfg.scale))
+    PrintCalibration(state.faction)
+end
+
+hook.Add("Think", "MYRP.Supply.FourCornerCalibration", function()
+    local state = calibrationMode
+    if not state or state.phase ~= "corners" then return end
+    if not IsValid(state.entity) then
+        StopCalibration("Терминал больше не существует.")
+        return
+    end
+
+    if input.WasMousePressed(MOUSE_RIGHT) then
+        StopCalibration("Калибровка по четырём углам отменена.")
+        return
+    end
+
+    if input.WasMousePressed(MOUSE_LEFT) then
+        local position, normal = GetCalibrationCursorHit(state)
+        if not position then
+            print("[MYRP:SUPPLY] Курсор должен попадать непосредственно в экран этого монитора.")
+            return
+        end
+
+        if #state.points > 0 and normal:Dot(state.points[1].normal) < 0.85 then
+            print("[MYRP:SUPPLY] Эта точка находится на другой плоскости. Выбирай все четыре угла на стекле экрана.")
+            return
+        end
+
+        state.points[#state.points + 1] = {position = position, normal = normal}
+        print(string.format("[MYRP:SUPPLY] Угол %d/4 отмечен.", #state.points))
+
+        if #state.points == 4 then
+            FinishFourCornerCalibration(state)
+        end
+    end
+end)
+
+hook.Add("HUDPaint", "MYRP.Supply.FourCornerCalibrationMarkers", function()
+    local state = calibrationMode
+    if not state or state.phase ~= "corners" then return end
+
+    local labels = {"1 TL", "2 TR", "3 BR", "4 BL"}
+    for index, point in ipairs(state.points) do
+        local screen = point.position:ToScreen()
+        surface.SetDrawColor(100, 255, 150, 240)
+        surface.DrawLine(screen.x - 7, screen.y, screen.x + 7, screen.y)
+        surface.DrawLine(screen.x, screen.y - 7, screen.x, screen.y + 7)
+        draw.SimpleText(labels[index], "MYRP_Supply_Log", screen.x + 9, screen.y + 3,
+            Color(130, 255, 165), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+    end
+
+    local nextLabel = labels[#state.points + 1] or "DONE"
+    draw.SimpleText("NEXT CORNER: " .. nextLabel, "MYRP_Supply_Body",
+        ScrW() * 0.5, 35, Color(130, 255, 165), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+end)
+
+concommand.Add("myrp_supply_ui_calibrate4", function()
+    if calibrationMode then
+        StopCalibration("Сначала заверши или отмени текущую калибровку.")
+        return
+    end
+
+    local faction = CalibrationFaction()
+    if not faction then
+        print("[MYRP:SUPPLY] Наведись на терминал нужной фракции и повтори команду.")
+        return
+    end
+
+    local entity, targetFaction = TargetTerminal()
+    if not IsValid(entity) or targetFaction ~= faction then
+        print("[MYRP:SUPPLY] Не удалось определить терминал. Наведись на него при запуске команды.")
+        return
+    end
+
+    calibrationMode = {entity = entity, faction = faction, phase = "corners", points = {}}
+    gui.EnableScreenClicker(true)
+    print("[MYRP:SUPPLY] Отметь четыре угла внутренней области экрана по часовой стрелке: верхний левый, верхний правый, нижний правый, нижний левый. ПКМ — отмена.")
 end)
 
 local function PrintCalibration(faction)
