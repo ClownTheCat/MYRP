@@ -1,3 +1,4 @@
+ITEM.isWeapon = true
 ITEM.name = "Crowbar"
 ITEM.description = "Обычный металлический лом."
 ITEM.model = "models/weapons/w_crowbar.mdl"
