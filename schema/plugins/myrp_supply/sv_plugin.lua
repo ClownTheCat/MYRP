@@ -120,6 +120,22 @@ local function IsLookingAt(client, entity, distance)
     return client:GetEyeTrace().Entity == entity
 end
 
+local function IsAimingAtTerminal(client, entity, distance)
+    if not IsValid(client) or not IsValid(entity) then return false end
+    if client:GetPos():DistToSqr(entity:GetPos()) > (distance or 180) ^ 2 then return false end
+
+    local direction = (entity:WorldSpaceCenter() - client:EyePos()):GetNormalized()
+    if client:GetAimVector():Dot(direction) < 0.93 then return false end
+
+    local trace = util.TraceLine({
+        start = client:EyePos(),
+        endpos = entity:WorldSpaceCenter(),
+        filter = client
+    })
+
+    return trace.Entity == entity or trace.Fraction >= 0.99
+end
+
 local function Broadcast(message)
     for _, client in ipairs(player.GetAll()) do
         if IsValid(client) then
@@ -295,7 +311,7 @@ end
 
 net.Receive("MYRP_Supply_StatusRequest", function(_, client)
     local terminal = net.ReadEntity()
-    if not IsValid(client) or not IsLookingAt(client, terminal, 180) then return end
+    if not IsValid(client) or not IsAimingAtTerminal(client, terminal, 180) then return end
 
     local terminalFaction = GetTerminalFaction(terminal)
     if not terminalFaction or GetFactionID(client) ~= terminalFaction then
@@ -309,7 +325,7 @@ end)
 net.Receive("MYRP_Supply_Request", function(_, client)
     local terminal = net.ReadEntity()
     if not IsValid(client) or not client:Alive() or not client:GetCharacter() then return end
-    if not IsLookingAt(client, terminal, 180) then return end
+    if not IsAimingAtTerminal(client, terminal, 180) then return end
 
     local terminalFaction = GetTerminalFaction(terminal)
     local faction = GetFactionID(client)
