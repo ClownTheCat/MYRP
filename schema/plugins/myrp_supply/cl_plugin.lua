@@ -100,13 +100,14 @@ local function LocalFaction()
     return MYRP.UI and MYRP.UI.GetFactionID and MYRP.UI.GetFactionID(LocalPlayer()) or "neutral"
 end
 
-local TERMINAL_PANEL_DISTANCE = 512 -- около 10 метров
+local TERMINAL_PANEL_DISTANCE = 1024 -- около 20 метров
+local terminalPanelAlpha = 0
 
 local function TargetTerminal()
     local client = LocalPlayer()
     if not IsValid(client) or not client:Alive() then return end
 
-    -- Показываем панель ближайшего терминала в радиусе, независимо от направления взгляда.
+    -- Показываем ближайший терминал в радиусе, независимо от направления взгляда.
     local bestEntity, bestFaction
     local bestDistanceSqr = TERMINAL_PANEL_DISTANCE * TERMINAL_PANEL_DISTANCE
 
@@ -122,7 +123,7 @@ local function TargetTerminal()
         end
     end
 
-    return bestEntity, bestFaction
+    return bestEntity, bestFaction, bestEntity and math.sqrt(bestDistanceSqr) or nil
 end
 
 local function TimeString(seconds)
@@ -171,6 +172,7 @@ local function DrawTerminalPanel(entity, faction)
     if not imgui.Entity3D2D(entity, localPosition, localAngle, scale, 300) then
         return false, false
     end
+        surface.SetAlphaMultiplier(terminalPanelAlpha)
         draw.RoundedBox(3, -4, -4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, fitting and 8 or 24))
         draw.RoundedBox(2, 0, 0, w, h, bg)
         surface.SetDrawColor(accent.r, accent.g, accent.b, fitting and 75 or 190)
@@ -260,10 +262,11 @@ local function DrawTerminalPanel(entity, faction)
 
         draw.SimpleText("AIM AT OPTION  //  PRESS E", "MYRP_Supply_Log",
             13, h - 10, Color(135, 155, 170))
-    local hovered = imgui.IsHovering(13, buttonY, w - 26, buttonH)
+    local hovered = terminalPanelAlpha > 0.25 and imgui.IsHovering(13, buttonY, w - 26, buttonH)
     local clicked = hovered and canActivate and imgui.IsPressed()
     imgui.xCursor(0, 0, w, h)
     imgui.End3D2D()
+    surface.SetAlphaMultiplier(1)
 
     terminalPanelState = {entity = entity, faction = faction, hovered = hovered, clicked = clicked, canActivate = canActivate}
     return hovered, canActivate
@@ -390,16 +393,26 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
     if calibrationMode then return end
     if IsValid(bootingTerminal) then return end
 
-    local entity, faction = TargetTerminal()
+    local entity, faction, distance = TargetTerminal()
+    local fadeRate = math.Clamp(FrameTime() * 3.5, 0, 1)
+
     if not IsValid(entity) then
-        activeTerminal = nil
-        terminalPanelState = nil
+        terminalPanelAlpha = Lerp(fadeRate, terminalPanelAlpha, 0)
+        if terminalPanelAlpha <= 0.01 then
+            terminalPanelAlpha = 0
+            activeTerminal = nil
+            terminalPanelState = nil
+        end
         lastTerminalUse = input.IsKeyDown(KEY_E)
         return
     end
 
+    local targetAlpha = math.Clamp(1 - (distance / TERMINAL_PANEL_DISTANCE), 0, 1)
+    terminalPanelAlpha = Lerp(fadeRate, terminalPanelAlpha, targetAlpha)
+
     if activeTerminal ~= entity then
         activeTerminal = entity
+        terminalPanelState = nil
         lastStatusRequest = 0
         status = {available = false, remaining = 0, activeCrate = false}
     end
