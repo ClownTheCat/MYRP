@@ -5,6 +5,7 @@ local pendingUseHasItem = false
 local pendingUseTime = 0
 local physicalHoldActive = false
 local physicalHoldPending = false
+local weaponSelectPatchApplied = false
 
 local actionNames = {
     "Взять в руки",
@@ -367,7 +368,7 @@ hook.Add("InitializedPlugins", "MYRP_WeaponInteraction_PatchWeaponSelect", funct
 
     if (!weaponSelect or !callbacks or !callbacks[weaponSelect]) then return end
 
-    if (weaponSelect.myrpWeaponInteractionWrapped) then return end
+    if (weaponSelectPatchApplied) then return end
 
     local original = callbacks[weaponSelect]
 
@@ -383,9 +384,8 @@ hook.Add("InitializedPlugins", "MYRP_WeaponInteraction_PatchWeaponSelect", funct
         return original(self, client, bind, pressed)
     end
 
-    wrapped.myrpWeaponInteractionWrapped = true
     callbacks[weaponSelect] = wrapped
-    weaponSelect.myrpWeaponInteractionWrapped = true
+    weaponSelectPatchApplied = true
 end)
 
 hook.Add("HUDShouldDraw", "MYRP_WeaponInteraction_HideWeaponSelection", function(name)
