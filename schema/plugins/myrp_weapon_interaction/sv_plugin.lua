@@ -389,6 +389,9 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
 
     if (!IsValid(client)) then return end
 
+    InteractionLog("DEBUG", "Hold packet: player=" .. client:Nick()
+        .. ", operation=" .. tostring(operation))
+
     if (operation == "release" or operation == "throw") then
         InteractionLog("DEBUG", "Hold " .. operation .. ": player=" .. client:Nick())
         ReleaseWeaponHold(client, operation == "throw")
