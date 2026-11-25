@@ -53,8 +53,8 @@ end
 
 local function ReadCalibration()
     local defaults = {
-        combine = {x = 0, y = 0, z = 0, scale = 1, rotation = 0},
-        resistance = {x = 0, y = 0, z = 0, scale = 1, rotation = 0}
+        combine = {x = 0, y = 0, z = 0, scale = 1, rotation = 0, surface = false, pitch = 0, yaw = 0, roll = 0},
+        resistance = {x = 0, y = 0, z = 0, scale = 1, rotation = 0, surface = false, pitch = 0, yaw = 0, roll = 0}
     }
     local saved = ix.data.Get(GetCalibrationKey(), defaults, false, true)
     if not istable(saved) then return defaults end
@@ -87,7 +87,11 @@ net.Receive("MYRP_Supply_CalibrationSet", function(_, client)
         y = math.Clamp(tonumber(config.y) or 0, -128, 128),
         z = math.Clamp(tonumber(config.z) or 0, -128, 128),
         scale = math.Clamp(tonumber(config.scale) or 1, 0.5, 1.8),
-        rotation = math.Clamp(tonumber(config.rotation) or 0, -180, 180)
+        rotation = math.Clamp(tonumber(config.rotation) or 0, -180, 180),
+        surface = config.surface == true,
+        pitch = math.Clamp(tonumber(config.pitch) or 0, -180, 180),
+        yaw = math.Clamp(tonumber(config.yaw) or 0, -180, 180),
+        roll = math.Clamp(tonumber(config.roll) or 0, -180, 180)
     }
     ix.data.Set(GetCalibrationKey(), saved, false, true)
 
