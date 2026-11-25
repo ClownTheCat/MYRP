@@ -1,3 +1,4 @@
+ITEM.isWeapon = true
 ITEM.name = "AR2"
 ITEM.description = "Импульсная винтовка Альянса."
 ITEM.model = "models/weapons/w_irifle.mdl"
