@@ -844,15 +844,26 @@ local function FinishFourCornerCalibration(state)
         print("[MYRP:SUPPLY] Внимание: пропорции отмеченной области отличаются от интерфейса более чем на 20%. Проверь, что нажал именно внутренние углы стекла.")
     end
 
-    local angle = SurfaceAngleFromNormal(normal)
-    local targetUp = up - normal * up:Dot(normal)
-    targetUp:Normalize()
-    local currentUp = angle:Up()
-    local roll = math.deg(math.atan2(normal:Dot(currentUp:Cross(targetUp)), currentUp:Dot(targetUp)))
-    angle:RotateAroundAxis(normal, roll)
+    local angle
+    if state.diagnostic then
+        -- imgui.Start3D2D uses angles:Up() as the surface normal.
+        -- Forward is the screen's horizontal axis; Right is its vertical axis.
+        angle = right:Angle()
+        local currentUp = angle:Up()
+        local roll = math.deg(math.atan2(right:Dot(currentUp:Cross(normal)), currentUp:Dot(normal)))
+        angle:RotateAroundAxis(right, roll)
+    else
+        -- Preserve the existing calibration path unchanged.
+        angle = SurfaceAngleFromNormal(normal)
+        local targetUp = up - normal * up:Dot(normal)
+        targetUp:Normalize()
+        local currentUp = angle:Up()
+        local roll = math.deg(math.atan2(normal:Dot(currentUp:Cross(targetUp)), currentUp:Dot(targetUp)))
+        angle:RotateAroundAxis(normal, roll)
 
-    if angle:Right():Dot(right) < 0 then
-        angle:RotateAroundAxis(normal, 180)
+        if angle:Right():Dot(right) < 0 then
+            angle:RotateAroundAxis(normal, 180)
+        end
     end
 
     local entity = state.entity
@@ -860,6 +871,28 @@ local function FinishFourCornerCalibration(state)
     local localPosition = entity:WorldToLocal(origin) - entity:OBBCenter()
     local localAngle = entity:WorldToLocalAngles(angle)
     local cfg = Config(state.faction)
+
+    if state.diagnostic then
+        local targetScale = math.Clamp(scale, 0.5, 1.8)
+        local currentX, currentY, currentZ = tonumber(cfg.x) or 0, tonumber(cfg.y) or 0, tonumber(cfg.z) or 0
+        local currentPitch, currentYaw, currentRoll = tonumber(cfg.pitch) or 0, tonumber(cfg.yaw) or 0, tonumber(cfg.roll) or 0
+        local deltaX, deltaY, deltaZ = localPosition.x - currentX, localPosition.y - currentY, localPosition.z - currentZ
+
+        print("[MYRP:SUPPLY] ===== FOUR-CORNER DIAGNOSTIC (NO SAVE) =====")
+        print(string.format("[MYRP:SUPPLY] Текущий offset: X %.2f Y %.2f Z %.2f", currentX, currentY, currentZ))
+        print(string.format("[MYRP:SUPPLY] Нужный offset:  X %.2f Y %.2f Z %.2f", localPosition.x, localPosition.y, localPosition.z))
+        print(string.format("[MYRP:SUPPLY] Сдвиг:          X %+.2f Y %+.2f Z %+.2f", deltaX, deltaY, deltaZ))
+        print(string.format("[MYRP:SUPPLY] Текущий angle: P %.1f Y %.1f R %.1f", currentPitch, currentYaw, currentRoll))
+        print(string.format("[MYRP:SUPPLY] Нужный angle:  P %.1f Y %.1f R %.1f", localAngle.p, localAngle.y, localAngle.r))
+        print(string.format("[MYRP:SUPPLY] Scale: %.2f (сейчас %.2f)", targetScale, tonumber(cfg.scale) or 1))
+        print("[MYRP:SUPPLY] Команды для применения:")
+        print(string.format("myrp_supply_ui_offset %.2f %.2f %.2f", localPosition.x, localPosition.y, localPosition.z))
+        print(string.format("myrp_supply_ui_angle %.1f %.1f %.1f", localAngle.p, localAngle.y, localAngle.r))
+        print(string.format("myrp_supply_ui_scale %.2f", targetScale))
+        print("[MYRP:SUPPLY] =============================================")
+        StopCalibration("Диагностика завершена. Настройки НЕ изменены.")
+        return
+    end
 
     cfg.x, cfg.y, cfg.z = localPosition.x, localPosition.y, localPosition.z
     cfg.pitch, cfg.yaw, cfg.roll = localAngle.p, localAngle.y, localAngle.r
@@ -962,6 +995,29 @@ concommand.Add("myrp_supply_ui_calibrate4", function()
     calibrationMode = {entity = entity, faction = faction, phase = "corners", points = {}}
     gui.EnableScreenClicker(true)
     print("[MYRP:SUPPLY] Отметь четыре угла внутренней области экрана по часовой стрелке: верхний левый, верхний правый, нижний правый, нижний левый. ПКМ — отмена.")
+end)
+
+concommand.Add("myrp_supply_ui_diagnose4", function()
+    if calibrationMode then
+        StopCalibration("Сначала заверши или отмени текущую калибровку.")
+        return
+    end
+
+    local faction = CalibrationFaction()
+    if not faction then
+        print("[MYRP:SUPPLY] Наведись на терминал нужной фракции и повтори команду.")
+        return
+    end
+
+    local entity, targetFaction = TargetTerminal()
+    if not IsValid(entity) or targetFaction ~= faction then
+        print("[MYRP:SUPPLY] Не удалось определить терминал. Наведись на него при запуске команды.")
+        return
+    end
+
+    calibrationMode = {entity = entity, faction = faction, phase = "corners", points = {}, diagnostic = true}
+    gui.EnableScreenClicker(true)
+    print("[MYRP:SUPPLY] ДИАГНОСТИКА: отметь 4 внутренних угла экрана по часовой стрелке. Настройки не будут сохранены. ПКМ — отмена.")
 end)
 
 local function PrintCalibration(faction)
