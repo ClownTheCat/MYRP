@@ -5,5 +5,5 @@ PLUGIN.description = "Moves dead players' inventories into searchable corpse inv
 if (SERVER) then
     ix.util.Include("sv_plugin.lua")
 else
-    ix.util.Include("cl_plugin.lua", "client")
+    ix.util.Include("myrp/schema/plugins/myrp_corpses/cl_plugin.lua", "client")
 end
