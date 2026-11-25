@@ -48,128 +48,127 @@ local function SavePoints(points)
 end
 
 local TERMINAL_PROP_MODELS = {
-    "models/props_lab/workspace002.mdl",
-    "models/props_combine/combine_intmonitor001.mdl"
+    ["models/props_lab/workspace002.mdl"] = true,
+    ["models/props_combine/combine_intmonitor001.mdl"] = true
 }
 
 local function GetTerminalPropsDataKey()
-    return "myrp_supply_terminal_props_" .. game.GetMap()
+    return "myrp_supply_spawned_terminal_props_" .. game.GetMap()
 end
 
 local function IsPersistentTerminalProp(entity)
     if not IsValid(entity) then return false end
-
-    local model = string.lower(entity:GetModel() or "")
-    for _, targetModel in ipairs(TERMINAL_PROP_MODELS) do
-        if model == targetModel then
-            return true
-        end
-    end
-
-    return false
+    return TERMINAL_PROP_MODELS[string.lower(entity:GetModel() or "")] == true
 end
 
-local function GetTerminalPropsByModel()
-    local found = {}
-
-    for _, model in ipairs(TERMINAL_PROP_MODELS) do
-        found[model] = {}
-    end
-
-    for _, entity in ipairs(ents.GetAll()) do
-        if IsPersistentTerminalProp(entity) then
-            local model = string.lower(entity:GetModel() or "")
-            found[model][#found[model] + 1] = entity
-        end
-    end
-
-    for _, entities in pairs(found) do
-        table.sort(entities, function(a, b)
-            return a:EntIndex() < b:EntIndex()
-        end)
-    end
-
-    return found
+local function ReadTerminalPropRecords()
+    local records = ix.data.Get(GetTerminalPropsDataKey(), {}, false, true)
+    return istable(records) and records or {}
 end
 
-local function SaveTerminalPropPositions()
-    local entities = GetTerminalPropsByModel()
-    local saved = {}
-
-    for model, list in pairs(entities) do
-        saved[model] = {}
-
-        for _, entity in ipairs(list) do
-            local position = entity:GetPos()
-            local angles = entity:GetAngles()
-
-            saved[model][#saved[model] + 1] = {
-                position = {x = position.x, y = position.y, z = position.z},
-                angles = {p = angles.p, y = angles.y, r = angles.r}
-            }
-        end
-    end
-
-    ix.data.Set(GetTerminalPropsDataKey(), saved, false, true)
-    Log("INFO", "Saved positions of terminal props.")
+local function WriteTerminalPropRecords(records)
+    ix.data.Set(GetTerminalPropsDataKey(), records, false, true)
 end
 
-local function RestoreTerminalPropPositions()
-    local saved = ix.data.Get(GetTerminalPropsDataKey(), {}, false, true)
-    if not istable(saved) then return end
-
-    local entities = GetTerminalPropsByModel()
-    local restored = 0
-
-    for _, model in ipairs(TERMINAL_PROP_MODELS) do
-        local savedList = saved[model]
-        local entityList = entities[model]
-
-        if istable(savedList) then
-            if #savedList ~= #entityList then
-                Log("WARN", model .. ": saved " .. #savedList
-                    .. " position(s), found " .. #entityList .. " map entity/entities.")
-            end
-
-            for index, record in ipairs(savedList) do
-                local entity = entityList[index]
-                local position = istable(record) and record.position
-                local angles = istable(record) and record.angles
-
-                if IsValid(entity)
-                    and istable(position)
-                    and istable(angles)
-                    and isnumber(position.x) and isnumber(position.y) and isnumber(position.z)
-                    and isnumber(angles.p) and isnumber(angles.y) and isnumber(angles.r) then
-
-                    entity:SetAngles(Angle(angles.p, angles.y, angles.r))
-                    entity:SetPos(Vector(position.x, position.y, position.z))
-
-                    local physics = entity:GetPhysicsObject()
-                    if IsValid(physics) then
-                        physics:Wake()
-                    end
-
-                    restored = restored + 1
-                end
-            end
+local function FindTerminalPropRecord(records, id)
+    for _, record in ipairs(records) do
+        if istable(record) and record.id == id then
+            return record
         end
     end
-
-    Log("INFO", "Restored " .. restored .. " terminal prop(s) from saved positions.")
 end
 
-hook.Add("PhysgunDrop", "MYRP.Supply.SaveTerminalPropPositions", function(client, entity)
+local function SaveTerminalPropTransform(entity)
+    if not IsPersistentTerminalProp(entity) then return end
+
+    local id = entity.MYRP_SupplyPersistentPropID
+    if not isstring(id) or id == "" then return end
+
+    local records = ReadTerminalPropRecords()
+    local record = FindTerminalPropRecord(records, id)
+    if not record then return end
+
+    local position = entity:GetPos()
+    local angles = entity:GetAngles()
+    record.position = {x = position.x, y = position.y, z = position.z}
+    record.angles = {p = angles.p, y = angles.y, r = angles.r}
+    WriteTerminalPropRecords(records)
+    Log("INFO", "Saved terminal prop transform: " .. entity:GetModel())
+end
+
+hook.Add("PlayerSpawnedProp", "MYRP.Supply.TrackSpawnedTerminalProp", function(client, model, entity)
+    if not IsValid(client) or not client:IsSuperAdmin() or not IsValid(entity) then return end
+
+    model = string.lower(tostring(model or entity:GetModel() or ""))
+    if not TERMINAL_PROP_MODELS[model] then return end
+
+    local id = tostring(os.time()) .. "_" .. tostring(entity:EntIndex()) .. "_" .. tostring(math.random(100000, 999999))
+    entity.MYRP_SupplyPersistentPropID = id
+    entity:SetNW2String("MYRP_SupplyPersistentPropID", id)
+
+    local position = entity:GetPos()
+    local angles = entity:GetAngles()
+    local records = ReadTerminalPropRecords()
+    records[#records + 1] = {
+        id = id,
+        model = model,
+        position = {x = position.x, y = position.y, z = position.z},
+        angles = {p = angles.p, y = angles.y, r = angles.r}
+    }
+    WriteTerminalPropRecords(records)
+    Log("INFO", client:Nick() .. " spawned persistent terminal prop: " .. model)
+end)
+
+hook.Add("PhysgunDrop", "MYRP.Supply.SaveSpawnedTerminalProp", function(client, entity)
     if not IsValid(client) or not client:IsSuperAdmin() then return end
     if not IsPersistentTerminalProp(entity) then return end
 
-    -- Wait one tick so the physgun's final transform has been applied.
     timer.Simple(0, function()
         if IsValid(entity) then
-            SaveTerminalPropPositions()
+            SaveTerminalPropTransform(entity)
         end
     end)
 end)
+
+local function RestoreSpawnedTerminalProps()
+    local records = ReadTerminalPropRecords()
+    local restored = 0
+
+    for _, record in ipairs(records) do
+        local model = istable(record) and string.lower(tostring(record.model or "")) or ""
+        local position = istable(record) and record.position
+        local angles = istable(record) and record.angles
+
+        if TERMINAL_PROP_MODELS[model]
+            and istable(position)
+            and istable(angles)
+            and isnumber(position.x) and isnumber(position.y) and isnumber(position.z)
+            and isnumber(angles.p) and isnumber(angles.y) and isnumber(angles.r) then
+
+            local entity = ents.Create("prop_physics")
+            if IsValid(entity) then
+                entity:SetModel(model)
+                entity:SetPos(Vector(position.x, position.y, position.z))
+                entity:SetAngles(Angle(angles.p, angles.y, angles.r))
+                entity:Spawn()
+                entity:Activate()
+
+                entity.MYRP_SupplyPersistentPropID = record.id
+                entity:SetNW2String("MYRP_SupplyPersistentPropID", tostring(record.id or ""))
+
+                local physics = entity:GetPhysicsObject()
+                if IsValid(physics) then
+                    physics:EnableMotion(false)
+                    physics:Sleep()
+                end
+
+                restored = restored + 1
+            end
+        end
+    end
+
+    Log("INFO", "Recreated " .. restored .. " spawned terminal prop(s) from saved data.")
+end
 
 local function GetCalibrationKey()
     return "myrp_supply_ui_" .. game.GetMap()
@@ -671,7 +670,7 @@ end)
 hook.Add("InitPostEntity", "MYRP.Supply.RestoreTerminalProps", function()
     timer.Simple(5, function()
         if not ix or not ix.data then return end
-        RestoreTerminalPropPositions()
+        RestoreSpawnedTerminalProps()
     end)
 end)
 
