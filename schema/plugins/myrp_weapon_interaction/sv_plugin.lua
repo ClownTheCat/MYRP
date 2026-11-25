@@ -168,8 +168,9 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     end
 
     local trace = client:GetEyeTrace()
+    local isCorpse = IsCorpseEntity(entity)
 
-    if (trace.Entity != entity) then
+    if (trace.Entity != entity and not isCorpse) then
         InteractionLog("WARN", "Action rejected: server eye trace mismatch; target="
             .. entity:GetClass() .. "#" .. entity:EntIndex()
             .. ", trace=" .. tostring(IsValid(trace.Entity) and (trace.Entity:GetClass() .. "#" .. trace.Entity:EntIndex()) or "<world>"))
@@ -177,7 +178,7 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     end
 
     -- MYRP corpse actions use the same interaction menu as weapons.
-    if (IsCorpseEntity(entity)) then
+    if (isCorpse) then
         InteractionLog("INFO", "Corpse recognized: name="
             .. entity:GetNW2String("myrp_corpse_name", "<none>")
             .. ", inventory=" .. tostring(entity.ixMYRPCorpseInventory and entity.ixMYRPCorpseInventory:GetID() or "nil"))
@@ -389,6 +390,7 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
     if (!IsValid(client)) then return end
 
     if (operation == "release" or operation == "throw") then
+        InteractionLog("DEBUG", "Hold " .. operation .. ": player=" .. client:Nick())
         ReleaseWeaponHold(client, operation == "throw")
         return
     end
@@ -412,13 +414,20 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
         return
     end
 
-    if (client:GetEyeTrace().Entity != entity or entity.myrpWeaponInteractionPending
-        or blockedWorldClasses[entity:GetClass()]) then
+    local isCorpse = IsCorpseEntity(entity)
+    if ((!isCorpse and client:GetEyeTrace().Entity != entity)
+        or entity.myrpWeaponInteractionPending or blockedWorldClasses[entity:GetClass()]) then
+        InteractionLog("WARN", "Hold rejected by trace/pending/class check: target="
+            .. entity:GetClass() .. "#" .. entity:EntIndex()
+            .. ", corpse=" .. tostring(isCorpse)
+            .. ", trace=" .. tostring(IsValid(client:GetEyeTrace().Entity) and client:GetEyeTrace().Entity:GetClass() or "<world>"))
         SendHoldStatus(client, "failed")
         return
     end
 
     if (!IsHoldableEntity(entity)) then
+        InteractionLog("WARN", "Hold rejected: target is not holdable: " .. entity:GetClass()
+            .. "#" .. entity:EntIndex())
         SendHoldStatus(client, "failed")
         return
     end
@@ -426,6 +435,8 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
     local hands = GetHands(client)
 
     if (!hands or !hands:CanHoldObject(entity)) then
+        InteractionLog("ERROR", "Helix hands cannot hold target: " .. entity:GetClass()
+            .. "#" .. entity:EntIndex() .. ", hands=" .. tostring(IsValid(hands)))
         Notify(client, "Этот предмет нельзя физически поднять.")
         SendHoldStatus(client, "failed")
         return
@@ -468,6 +479,8 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
         hands:PickupObject(entity)
 
         if (!hands:IsHoldingObject()) then
+            InteractionLog("ERROR", "PickupObject did not start holding target: "
+                .. entity:GetClass() .. "#" .. entity:EntIndex())
             heldWeapons[client] = nil
 
             if (previousWeapon and previousWeapon != "ix_hands" and client:HasWeapon(previousWeapon)) then
@@ -478,6 +491,8 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
             return
         end
 
+        InteractionLog("INFO", "Hold started successfully: " .. entity:GetClass()
+            .. "#" .. entity:EntIndex() .. ", owner=" .. client:Nick())
         SendHoldStatus(client, "started")
     end)
 end)
