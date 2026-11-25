@@ -559,53 +559,86 @@ local function StopCalibration(message)
     if message then print("[MYRP:SUPPLY] " .. message) end
 end
 
-local function CalibrationTrace()
-    if not calibrationMode then return end
+local function CalibrationRay()
     local client = LocalPlayer()
     if not IsValid(client) then return end
     local mx, my = gui.MousePos()
     if mx < 0 or my < 0 then return end
 
-    local direction = gui.ScreenToVector(mx, my)
-    local trace = util.TraceLine({
-        start = client:EyePos(),
-        endpos = client:EyePos() + direction * 1200,
-        filter = client
-    })
+    return client:EyePos(), gui.ScreenToVector(mx, my)
+end
 
-    if trace.Hit and trace.Entity == calibrationMode.entity then
-        local normal = trace.HitNormal:GetNormalized()
-        local angle = SurfaceAngleFromNormal(normal)
-        calibrationMode.hitPosition = trace.HitPos + normal * 0.35
-        calibrationMode.hitAngle = angle
-        if calibrationMode.phase == "placing" then
-            calibrationMode.previewPosition = calibrationMode.hitPosition
-            calibrationMode.previewAngle = calibrationMode.hitAngle
+local function CalibrationTrace()
+    local state = calibrationMode
+    if not state then return end
+
+    local origin, direction = CalibrationRay()
+    if not origin or not direction then return end
+
+    if state.phase == "selecting" then
+        local trace = util.TraceLine({
+            start = origin,
+            endpos = origin + direction * 1200,
+            filter = LocalPlayer()
+        })
+
+        if trace.Hit and trace.Entity == state.entity then
+            local normal = trace.HitNormal:GetNormalized()
+            state.hitPosition = trace.HitPos + normal * 0.45
+            state.hitAngle = SurfaceAngleFromNormal(normal)
+            state.previewPosition = state.hitPosition
+            state.previewAngle = state.hitAngle
+        else
+            state.hitPosition = nil
+            state.hitAngle = nil
+            state.previewPosition = nil
+            state.previewAngle = nil
         end
-    elseif calibrationMode.phase == "placing" then
-        calibrationMode.hitPosition = nil
-        calibrationMode.hitAngle = nil
-        calibrationMode.previewPosition = nil
-        calibrationMode.previewAngle = nil
+    elseif state.phase == "placing" and state.planePosition and state.planeNormal then
+        -- Intersect the cursor ray with the one plane selected by the first click.
+        -- This prevents the panel from jumping between the monitor, bezel and other
+        -- faces of the prop while the cursor moves.
+        local denominator = direction:Dot(state.planeNormal)
+        if math.abs(denominator) < 0.0001 then return end
+
+        local distance = (state.planePosition - origin):Dot(state.planeNormal) / denominator
+        if distance < 0 then return end
+
+        state.previewPosition = origin + direction * distance + state.planeNormal * 0.45
+        state.previewAngle = state.planeAngle
+        state.hitPosition = state.previewPosition
+        state.hitAngle = state.planeAngle
     end
+end
+
+local function LockCalibrationPlane()
+    local state = calibrationMode
+    if not state or not state.hitPosition or not state.hitAngle then
+        print("[MYRP:SUPPLY] Сначала наведи курсор на сам экран монитора.")
+        return
+    end
+
+    state.planePosition = state.hitPosition
+    state.planeNormal = state.hitAngle:Forward()
+    state.planeAngle = state.hitAngle
+    state.phase = "placing"
+    print("[MYRP:SUPPLY] Плоскость экрана зафиксирована. Теперь двигай курсор по экрану и нажми ЛКМ для установки панели.")
 end
 
 local function CommitCalibrationPosition()
     local state = calibrationMode
-    if not state or not state.hitPosition or not state.hitAngle then return end
+    if not state or not state.previewPosition or not state.previewAngle then return end
 
     local entity = state.entity
     if not IsValid(entity) then StopCalibration("Терминал больше не существует.") return end
 
     local cfg = Config(state.faction)
-    local localPosition = entity:WorldToLocal(state.hitPosition) - entity:OBBCenter()
-    local localAngle = entity:WorldToLocalAngles(state.hitAngle)
+    local localPosition = entity:WorldToLocal(state.previewPosition) - entity:OBBCenter()
+    local localAngle = entity:WorldToLocalAngles(state.previewAngle)
     cfg.x, cfg.y, cfg.z = localPosition.x, localPosition.y, localPosition.z
     cfg.pitch, cfg.yaw, cfg.roll = localAngle.p, localAngle.y, localAngle.r
     cfg.surface = true
 
-    state.previewPosition = state.hitPosition
-    state.previewAngle = state.hitAngle
     state.phase = "sizing"
     print("[MYRP:SUPPLY] Положение зафиксировано. Колесо мыши — размер, ЛКМ — сохранить, ПКМ — отменить.")
 end
@@ -615,10 +648,14 @@ hook.Add("Think", "MYRP.Supply.SurfaceCalibration", function()
     if not state then return end
     if not IsValid(state.entity) then StopCalibration("Терминал больше не существует.") return end
 
-    if state.phase == "placing" then
+    if state.phase == "selecting" or state.phase == "placing" then
         CalibrationTrace()
         if input.WasMousePressed(MOUSE_LEFT) then
-            CommitCalibrationPosition()
+            if state.phase == "selecting" then
+                LockCalibrationPlane()
+            else
+                CommitCalibrationPosition()
+            end
         elseif input.WasMousePressed(MOUSE_RIGHT) then
             StopCalibration("Настройка отменена.")
         end
@@ -645,11 +682,17 @@ hook.Add("HUDPaint", "MYRP.Supply.SurfaceCalibrationHelp", function()
     if not state then return end
 
     local lines
-    if state.phase == "placing" then
+    if state.phase == "selecting" then
         lines = {
             "MYRP // SURFACE CALIBRATION",
-            "Наведи курсор на экран монитора — панель последует за ним",
-            "ЛКМ — зафиксировать положение    ПКМ — отмена"
+            "Наведи курсор на плоскость экрана монитора",
+            "ЛКМ — зафиксировать плоскость    ПКМ — отмена"
+        }
+    elseif state.phase == "placing" then
+        lines = {
+            "MYRP // SURFACE CALIBRATION",
+            "Плоскость зафиксирована — двигай курсор по экрану",
+            "ЛКМ — установить панель    ПКМ — отмена"
         }
     else
         lines = {
@@ -703,9 +746,9 @@ concommand.Add("myrp_supply_ui_calibrate", function()
         return
     end
 
-    calibrationMode = {entity = entity, faction = faction, phase = "placing"}
+    calibrationMode = {entity = entity, faction = faction, phase = "selecting"}
     gui.EnableScreenClicker(true)
-    print("[MYRP:SUPPLY] Курсор включён. Наведи его на поверхность монитора и нажми ЛКМ.")
+    print("[MYRP:SUPPLY] Курсор включён. Наведи его на экран монитора и нажми ЛКМ, чтобы зафиксировать плоскость.")
 end)
 
 concommand.Add("myrp_supply_ui_offset", function(_, _, args)
