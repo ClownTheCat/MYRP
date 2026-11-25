@@ -518,7 +518,8 @@ net.Receive("MYRP_Supply_Request", function(_, client)
         local currentPoint = currentPoints[faction]
         if not istable(currentPoint) then return end
 
-        local position = Vector(currentPoint.x, currentPoint.y, currentPoint.z) + Vector(0, 0, 64)
+        -- Drop the crate from above the saved landing point so players can see it descend.
+        local position = Vector(currentPoint.x, currentPoint.y, currentPoint.z) + Vector(0, 0, 600)
         local angles = Angle(0, currentPoint.yaw or 0, 0)
         local crate = ents.Create("prop_physics")
 
@@ -539,7 +540,7 @@ net.Receive("MYRP_Supply_Request", function(_, client)
         local physics = crate:GetPhysicsObject()
         if IsValid(physics) then
             physics:Wake()
-            physics:SetVelocity(Vector(0, 0, -80))
+            physics:SetVelocity(Vector(0, 0, -120))
         end
 
         activeCrates[faction] = crate
