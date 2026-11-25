@@ -5,7 +5,9 @@ local activeTerminal
 local status = {available = false, remaining = 0, activeCrate = false}
 local lastStatusRequest = 0
 local loadingUntil = 0
-local lastUse = false
+local lastTerminalUse = false
+local lastCrateUse = false
+local openingSound
 local clicker = false
 local configs = {}
 local openingProgress = 0
@@ -151,7 +153,7 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
     if not IsValid(entity) then
         activeTerminal = nil
         SetClicker(false)
-        lastUse = input.IsKeyDown(KEY_E)
+        lastTerminalUse = input.IsKeyDown(KEY_E)
         return
     end
 
@@ -171,7 +173,7 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
 
     local hovered, canRequest = DrawTerminal(entity, faction)
     local useDown = input.IsKeyDown(KEY_E)
-    if useDown and not lastUse and hovered then
+    if useDown and not lastTerminalUse and hovered then
         if canRequest then
             loadingUntil = CurTime() + 1.7
             status.available = false
@@ -184,7 +186,7 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
             MYRP.UI.PlaySound("denied")
         end
     end
-    lastUse = useDown
+    lastTerminalUse = useDown
 end)
 
 net.Receive("MYRP_Supply_Status", function()
@@ -196,6 +198,22 @@ end)
 net.Receive("MYRP_Supply_OpenProgress", function()
     openingProgress = net.ReadFloat()
     local state = net.ReadString()
+
+    if state == "progress" then
+        if not openingSound then
+            openingSound = CreateSound(LocalPlayer(), "items/medshot4.wav")
+            if openingSound then openingSound:PlayEx(0.35, 85) end
+        end
+
+        if openingSound then
+            openingSound:ChangeVolume(0.35, 0)
+            openingSound:ChangePitch(85 + openingProgress * 55, 0.08)
+        end
+    elseif openingSound then
+        openingSound:Stop()
+        openingSound = nil
+    end
+
     if state == "cancelled" and MYRP.UI and MYRP.UI.PlaySound then
         MYRP.UI.PlaySound("denied")
     end
@@ -231,15 +249,15 @@ hook.Add("HUDPaint", "MYRP.Supply.CrateInteraction", function()
     end
 
     local down = input.IsKeyDown(KEY_E)
-    if down and not lastUse then
+    if down and not lastCrateUse then
         net.Start("MYRP_Supply_OpenStart")
             net.WriteEntity(entity)
         net.SendToServer()
-    elseif not down and lastUse then
+    elseif not down and lastCrateUse then
         net.Start("MYRP_Supply_OpenStop")
         net.SendToServer()
     end
-    lastUse = down
+    lastCrateUse = down
 end)
 
 hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.CrateFactionOutline", function()
