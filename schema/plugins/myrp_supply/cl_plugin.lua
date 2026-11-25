@@ -264,10 +264,11 @@ local function DrawTerminalPanel(entity, faction)
         draw.SimpleText("AIM AT OPTION  //  PRESS E", "MYRP_Supply_Log",
             13, h - 10, Color(135, 155, 170))
     local hovered = imgui.IsHovering(13, buttonY, w - 26, buttonH)
+    local clicked = hovered and canActivate and imgui.IsPressed()
     imgui.xCursor(0, 0, w, h)
     imgui.End3D2D()
 
-    terminalPanelState = {entity = entity, faction = faction, hovered = hovered, canActivate = canActivate}
+    terminalPanelState = {entity = entity, faction = faction, hovered = hovered, clicked = clicked, canActivate = canActivate}
     return hovered, canActivate
 end
 
@@ -406,9 +407,8 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
         net.SendToServer()
     end
 
-    local useDown = input.IsKeyDown(KEY_E)
     local panel = terminalPanelState
-    if useDown and not lastTerminalUse and panel and panel.entity == entity and panel.hovered and panel.canActivate then
+    if panel and panel.entity == entity and panel.clicked then
         if not terminalBooted[entity] then
             bootingTerminal = entity
             bootingFaction = faction
@@ -434,10 +434,7 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
                 net.WriteEntity(entity)
             net.SendToServer()
         end
-    elseif useDown and not lastTerminalUse and panel and panel.entity == entity and not panel.hovered then
-        if MYRP.UI and MYRP.UI.PlaySound then MYRP.UI.PlaySound("denied") end
     end
-    lastTerminalUse = useDown
 end)
 
 net.Receive("MYRP_Supply_Status", function()
