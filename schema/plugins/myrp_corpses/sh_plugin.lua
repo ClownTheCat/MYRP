@@ -6,4 +6,4 @@ if (SERVER) then
     ix.util.Include("sv_plugin.lua")
 end
 
-ix.util.Include("cl_plugin.lua", "client")
+ix.util.Include(PLUGIN.folder .. "/cl_plugin.lua", "client")
