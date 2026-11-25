@@ -53,6 +53,18 @@ end
 local function RegisterWeaponActions()
     local count = 0
 
+    local normalizedCount = 0
+
+    -- MYRP uses a one-slot-per-item inventory, like Minecraft.
+    -- Normalize every registered item before players load their inventories.
+    for _, item in pairs(ix.item.list or {}) do
+        if (item.width != 1 or item.height != 1) then
+            item.width = 1
+            item.height = 1
+            normalizedCount = normalizedCount + 1
+        end
+    end
+
     for uniqueID, item in pairs(ix.item.list or {}) do
         if (item.isWeapon and isstring(item.class)) then
             item.functions = item.functions or {}
@@ -119,7 +131,7 @@ local function RegisterWeaponActions()
         end
     end
 
-    print("[MYRP Weapon Interaction] Registered actions for " .. count .. " weapon items.")
+    print("[MYRP Weapon Interaction] Normalized " .. normalizedCount .. " item(s) to 1x1; registered actions for " .. count .. " weapon items.")
 end
 
 hook.Add(
