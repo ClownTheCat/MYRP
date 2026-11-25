@@ -183,7 +183,21 @@ local function ReleaseWeaponHold(client, shouldThrow)
     local hands = state.hands
 
     if (IsValid(hands) and hands:IsHoldingObject()) then
-        hands:DropObject(shouldThrow == true)
+        if (shouldThrow == true) then
+            -- Helix's default throw force can be too weak for some weapon physics objects.
+            -- Drop normally, then give the released physics object a clear forward velocity.
+            local physics = hands:GetHeldPhysicsObject()
+            local throwDirection = IsValid(client) and client:GetAimVector() or vector_origin
+
+            hands:DropObject(false)
+
+            if (IsValid(physics)) then
+                physics:Wake()
+                physics:SetVelocityInstantaneous(throwDirection * 900)
+            end
+        else
+            hands:DropObject(false)
+        end
     end
 
     if (IsValid(client) and client:Alive() and state.previousWeapon and state.previousWeapon != "ix_hands") then
