@@ -27,3 +27,7 @@ end
 function ITEM:GetSkin()
     return math.max(tonumber(self:GetData("myrpWorldSkin", 0)) or 0, 0)
 end
+
+function ITEM:GetMaterial()
+    return self:GetData("myrpWorldMaterial")
+end
