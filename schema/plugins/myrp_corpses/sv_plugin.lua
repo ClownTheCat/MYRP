@@ -11,8 +11,8 @@ local function CorpseLog(level, message)
         color_white, tostring(message) .. "\n")
 end
 
-ix.inventory.Register(CORPSE_INVENTORY, 10, 10)
-ix.inventory.Register(BOT_INVENTORY, 10, 10)
+ix.item.RegisterInv(CORPSE_INVENTORY, 10, 10)
+ix.item.RegisterInv(BOT_INVENTORY, 10, 10)
 
 local function IsTestBot(client)
     return IsValid(client) and client:IsPlayer() and client:IsBot()
@@ -54,7 +54,7 @@ local function CreateBotInventory(bot)
 
     bot.ixMYRPTestInventoryCreating = true
 
-    ix.inventory.New(0, BOT_INVENTORY, function(inventory)
+    ix.item.NewInv(0, BOT_INVENTORY, function(inventory)
         if (not IsValid(bot) or not IsTestBot(bot) or not bot:Alive()) then
             if (IsValid(bot)) then
                 bot.ixMYRPTestInventoryCreating = nil
@@ -115,7 +115,7 @@ local function MoveInventoryToCorpse(client, ragdoll)
     ragdoll.ixMYRPCorpseInventoryCreating = true
     ragdoll.ixMYRPCorpseOwner = client
 
-    ix.inventory.New(0, CORPSE_INVENTORY, function(corpseInventory)
+    ix.item.NewInv(0, CORPSE_INVENTORY, function(corpseInventory)
         if (not IsValid(ragdoll)) then
             DeleteTemporaryInventory(corpseInventory)
             return
