@@ -1,3 +1,8 @@
+-- A new MYRP round starts clean: do not restore dropped world items after a server restart.
+function PLUGIN:ShouldDeleteSavedItems()
+    return true
+end
+
 util.AddNetworkString("MYRP_WeaponInteraction_Action")
 
 local pendingPickups = {}
