@@ -14,6 +14,7 @@ local bootingFaction
 local bootStartedAt = 0
 local bootDuration = 6
 local terminalPanelState
+local bootMusicChannel
 local configs = {}
 local openingProgress = 0
 local openingTargetProgress = 0
@@ -68,10 +69,32 @@ end
 local function TargetTerminal()
     local client = LocalPlayer()
     if not IsValid(client) or not client:Alive() then return end
-    local entity = client:GetEyeTrace().Entity
-    local faction = FactionForModel(entity)
-    if not faction or client:GetPos():DistToSqr(entity:GetPos()) > 220 * 220 then return end
-    return entity, faction
+
+    local traceEntity = client:GetEyeTrace().Entity
+    local traceFaction = FactionForModel(traceEntity)
+    if traceFaction and client:GetPos():DistToSqr(traceEntity:GetPos()) <= 220 * 220 then
+        return traceEntity, traceFaction
+    end
+
+    -- While aiming at the floating 3D2D menu, the eye trace hits empty space
+    -- instead of the physical monitor. Keep the nearest terminal in the aim cone active.
+    local aim = client:GetAimVector()
+    local bestEntity, bestFaction
+    local bestDot = 0.94
+    for _, entity in ipairs(ents.FindInSphere(client:GetPos(), 220)) do
+        local faction = FactionForModel(entity)
+        if faction then
+            local direction = (entity:WorldSpaceCenter() - client:EyePos()):GetNormalized()
+            local dot = aim:Dot(direction)
+            if dot > bestDot then
+                bestDot = dot
+                bestEntity = entity
+                bestFaction = faction
+            end
+        end
+    end
+
+    return bestEntity, bestFaction
 end
 
 local function TimeString(seconds)
@@ -293,6 +316,10 @@ local function DrawBootScreen()
         bootingTerminal = nil
         bootingFaction = nil
         lastStatusRequest = 0
+        if IsValid(bootMusicChannel) then
+            bootMusicChannel:Stop()
+            bootMusicChannel = nil
+        end
         surface.PlaySound("buttons/button14.wav")
     end
 end
@@ -332,7 +359,18 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
             bootingTerminal = entity
             bootingFaction = faction
             bootStartedAt = CurTime()
-            surface.PlaySound("music/hl2_song15.mp3")
+            if sound and sound.PlayFile then
+                sound.PlayFile("sound/music/hl2_song15.mp3", "noplay", function(channel, errorCode)
+                    if IsValid(channel) and IsValid(bootingTerminal) then
+                        bootMusicChannel = channel
+                        channel:Play()
+                    else
+                        surface.PlaySound("buttons/combine_button1.wav")
+                    end
+                end)
+            else
+                surface.PlaySound("buttons/combine_button1.wav")
+            end
         else
             loadingUntil = CurTime() + 1.7
             status.available = false
