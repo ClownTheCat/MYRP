@@ -98,7 +98,7 @@ local function LocalFaction()
     return MYRP.UI and MYRP.UI.GetFactionID and MYRP.UI.GetFactionID(LocalPlayer()) or "neutral"
 end
 
-local TERMINAL_PANEL_DISTANCE = 1024 -- около 20 метров
+local TERMINAL_PANEL_DISTANCE = 2048 -- около 40 метров
 local function TargetTerminal()
     local client = LocalPlayer()
     if not IsValid(client) or not client:Alive() then return end
@@ -166,7 +166,7 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
 
     local localPosition = entity:WorldToLocal(position)
     local localAngle = entity:WorldToLocalAngles(angle)
-    if not imgui.Entity3D2D(entity, localPosition, localAngle, scale, 300) then
+    if not imgui.Entity3D2D(entity, localPosition, localAngle, scale, 3000) then
         return false, false
     end
         surface.SetAlphaMultiplier(panelOpacity)
@@ -290,7 +290,7 @@ local function DrawBootScreen()
     local localPosition = bootingTerminal:WorldToLocal(position)
     local localAngle = bootingTerminal:WorldToLocalAngles(angle)
 
-    if imgui.Entity3D2D(bootingTerminal, localPosition, localAngle, scale, 300) then
+    if imgui.Entity3D2D(bootingTerminal, localPosition, localAngle, scale, 3000) then
         local w, h = 360, 344
         draw.RoundedBox(2, 0, 0, w, h, bg)
         surface.SetDrawColor(accent.r, accent.g, accent.b, 210)
