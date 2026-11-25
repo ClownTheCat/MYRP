@@ -294,24 +294,26 @@ end)
 hook.Add("InitializedPlugins", "MYRP_CorpseLooting_CleanupOldInventories", function()
     local query = mysql:Select("ix_inventories")
         :Select("inventory_id")
-        :WhereIn("inventory_type", {CORPSE_INVENTORY, BOT_INVENTORY})
+        :Select("inventory_type")
 
     query:Callback(function(rows)
         if (not istable(rows)) then return end
 
         for _, row in ipairs(rows) do
-            local id = tonumber(row.inventory_id)
+            if (row.inventory_type == CORPSE_INVENTORY or row.inventory_type == BOT_INVENTORY) then
+                local id = tonumber(row.inventory_id)
 
-            if (id) then
-                mysql:Delete("ix_items")
-                    :Where("inventory_id", id)
-                    :Execute()
+                if (id) then
+                    mysql:Delete("ix_items")
+                        :Where("inventory_id", id)
+                        :Execute()
 
-                mysql:Delete("ix_inventories")
-                    :Where("inventory_id", id)
-                    :Execute()
+                    mysql:Delete("ix_inventories")
+                        :Where("inventory_id", id)
+                        :Execute()
 
-                ix.item.inventories[id] = nil
+                    ix.item.inventories[id] = nil
+                end
             end
         end
     end)
