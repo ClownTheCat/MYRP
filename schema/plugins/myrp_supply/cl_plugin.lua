@@ -160,7 +160,9 @@ local function DrawTerminalPanel(entity, faction)
     local combine = faction == "combine"
     local accent = combine and Color(105, 180, 245) or Color(218, 145, 91)
     local bright = combine and Color(174, 218, 255) or Color(245, 188, 132)
-    local bg = combine and Color(5, 14, 24, 245) or Color(19, 13, 10, 245)
+    local fitting = calibrationMode and calibrationMode.entity == entity and calibrationMode.fit
+    local panelAlpha = fitting and 55 or 245
+    local bg = combine and Color(5, 14, 24, panelAlpha) or Color(19, 13, 10, panelAlpha)
     local authorized = LocalFaction() == faction
     -- The CRT display area is nearly square, so use a matching logical canvas.
     local w, h = 360, 344
@@ -175,11 +177,11 @@ local function DrawTerminalPanel(entity, faction)
     if not imgui.Entity3D2D(entity, localPosition, localAngle, scale, 300) then
         return false, false
     end
-        draw.RoundedBox(3, -4, -4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, 24))
+        draw.RoundedBox(3, -4, -4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, fitting and 8 or 24))
         draw.RoundedBox(2, 0, 0, w, h, bg)
-        surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
+        surface.SetDrawColor(accent.r, accent.g, accent.b, fitting and 75 or 190)
         surface.DrawOutlinedRect(0, 0, w, h, 1)
-        surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
+        surface.SetDrawColor(accent.r, accent.g, accent.b, fitting and 75 or 190)
         surface.DrawRect(1, 1, w - 2, 3)
 
         draw.SimpleText(combine and "CITADEL SUPPLY // NODE-07" or "RESISTANCE NET // NODE-03",
