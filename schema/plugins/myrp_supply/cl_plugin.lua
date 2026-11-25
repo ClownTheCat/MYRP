@@ -837,6 +837,80 @@ local function FinishFourCornerCalibration(state)
         return
     end
 
+    if state.fit then
+        local entity = state.entity
+        local cfg = Config(state.faction)
+
+        -- The current imgui panel uses Forward for horizontal and Right for vertical.
+        local horizontal = ((topRight - topLeft) + (bottomRight - bottomLeft)):GetNormalized()
+        local down = ((bottomLeft - topLeft) + (bottomRight - topRight)):GetNormalized()
+        down = down - horizontal * down:Dot(horizontal)
+        down:Normalize()
+
+        -- With imgui, angles:Up() is the visible surface normal.
+        local targetNormal = down:Cross(horizontal):GetNormalized()
+        local targetAngle = horizontal:Angle()
+        local currentUp = targetAngle:Up()
+        local alignRoll = math.deg(math.atan2(
+            horizontal:Dot(currentUp:Cross(targetNormal)),
+            currentUp:Dot(targetNormal)
+        ))
+        targetAngle:RotateAroundAxis(horizontal, alignRoll)
+
+        local targetOrigin = topLeft + targetNormal * 0.45
+        local targetLocalPosition = entity:WorldToLocal(targetOrigin) - entity:OBBCenter()
+        local targetLocalAngle = entity:WorldToLocalAngles(targetAngle)
+        local scaleX = width / 360 / 0.075
+        local scaleY = height / 220 / 0.075
+        local targetScale = math.Clamp((scaleX + scaleY) * 0.5, 0.5, 1.8)
+
+        local currentPosition, currentAngle, currentWorldScale = GetPanelTransform(entity, state.faction)
+        local currentForward = currentAngle:Forward()
+        local currentRight = currentAngle:Right()
+        local currentCorners = {
+            currentPosition,
+            currentPosition + currentForward * (360 * currentWorldScale),
+            currentPosition + currentForward * (360 * currentWorldScale) + currentRight * (220 * currentWorldScale),
+            currentPosition + currentRight * (220 * currentWorldScale)
+        }
+        local targetCorners = {topLeft, topRight, bottomRight, bottomLeft}
+
+        print("[MYRP:SUPPLY] ===== PANEL FIT DIAGNOSTIC (NO SAVE) =====")
+        print("[MYRP:SUPPLY] Текущая панель остаётся на экране; настройки не изменяются.")
+        for i = 1, 4 do
+            local errorVector = targetCorners[i] - currentCorners[i]
+            print(string.format(
+                "[MYRP:SUPPLY] Угол %d | сейчас %s | цель %s | поправка %s | расстояние %.2f",
+                i, tostring(currentCorners[i]), tostring(targetCorners[i]),
+                tostring(errorVector), errorVector:Length()
+            ))
+        end
+
+        local currentLocalPosition = Vector(tonumber(cfg.x) or 0, tonumber(cfg.y) or 0, tonumber(cfg.z) or 0)
+        local positionDelta = targetLocalPosition - currentLocalPosition
+        local currentPitch = tonumber(cfg.pitch) or 0
+        local currentYaw = tonumber(cfg.yaw) or 0
+        local currentRoll = tonumber(cfg.roll) or 0
+        print(string.format("[MYRP:SUPPLY] Offset сейчас: X %.2f Y %.2f Z %.2f", currentLocalPosition.x, currentLocalPosition.y, currentLocalPosition.z))
+        print(string.format("[MYRP:SUPPLY] Offset цель:  X %.2f Y %.2f Z %.2f", targetLocalPosition.x, targetLocalPosition.y, targetLocalPosition.z))
+        print(string.format("[MYRP:SUPPLY] Сдвиг:         X %+.2f Y %+.2f Z %+.2f", positionDelta.x, positionDelta.y, positionDelta.z))
+        print(string.format("[MYRP:SUPPLY] Угол сейчас: P %.1f Y %.1f R %.1f", currentPitch, currentYaw, currentRoll))
+        print(string.format("[MYRP:SUPPLY] Угол цель:  P %.1f Y %.1f R %.1f", targetLocalAngle.p, targetLocalAngle.y, targetLocalAngle.r))
+        print(string.format("[MYRP:SUPPLY] Поворот:     P %+.1f Y %+.1f R %+.1f",
+            math.AngleDifference(targetLocalAngle.p, currentPitch),
+            math.AngleDifference(targetLocalAngle.y, currentYaw),
+            math.AngleDifference(targetLocalAngle.r, currentRoll)))
+        print(string.format("[MYRP:SUPPLY] Scale сейчас %.2f | цель %.2f | X %.2f | Y %.2f",
+            tonumber(cfg.scale) or 1, targetScale, scaleX, scaleY))
+        print("[MYRP:SUPPLY] Команды для применения (пока НЕ вводи, сначала пришли этот вывод):")
+        print(string.format("myrp_supply_ui_offset %.2f %.2f %.2f", targetLocalPosition.x, targetLocalPosition.y, targetLocalPosition.z))
+        print(string.format("myrp_supply_ui_angle %.1f %.1f %.1f", targetLocalAngle.p, targetLocalAngle.y, targetLocalAngle.r))
+        print(string.format("myrp_supply_ui_scale %.2f", targetScale))
+        print("[MYRP:SUPPLY] =========================================")
+        StopCalibration("Сняты метрики положения панели. Ничего не сохранено.")
+        return
+    end
+
     local scaleX = width / 360 / 0.075
     local scaleY = height / 220 / 0.075
     local scale = (scaleX + scaleY) * 0.5
@@ -995,6 +1069,29 @@ concommand.Add("myrp_supply_ui_calibrate4", function()
     calibrationMode = {entity = entity, faction = faction, phase = "corners", points = {}}
     gui.EnableScreenClicker(true)
     print("[MYRP:SUPPLY] Отметь четыре угла внутренней области экрана по часовой стрелке: верхний левый, верхний правый, нижний правый, нижний левый. ПКМ — отмена.")
+end)
+
+concommand.Add("myrp_supply_ui_fit", function()
+    if calibrationMode then
+        StopCalibration("Сначала заверши или отмени текущую калибровку.")
+        return
+    end
+
+    local faction = CalibrationFaction()
+    if not faction then
+        print("[MYRP:SUPPLY] Наведись на терминал нужной фракции и повтори команду.")
+        return
+    end
+
+    local entity, targetFaction = TargetTerminal()
+    if not IsValid(entity) or targetFaction ~= faction then
+        print("[MYRP:SUPPLY] Не удалось определить терминал. Наведись на него при запуске команды.")
+        return
+    end
+
+    calibrationMode = {entity = entity, faction = faction, phase = "corners", points = {}, fit = true}
+    gui.EnableScreenClicker(true)
+    print("[MYRP:SUPPLY] РЕЖИМ ПОДГОНКИ: текущая панель остаётся видимой. Отметь 4 угла реального экрана по часовой стрелке: TL, TR, BR, BL. ПКМ — отмена.")
 end)
 
 concommand.Add("myrp_supply_ui_diagnose4", function()
