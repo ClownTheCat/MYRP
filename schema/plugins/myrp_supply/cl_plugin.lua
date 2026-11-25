@@ -201,8 +201,10 @@ local function DrawTerminalPanel(entity, faction)
             buttonText = "E   ЗАПУСТИТЬ ОС"
         elseif loadingRequest then
             buttonText = "ЗАПРОС ОТПРАВЛЯЕТСЯ..."
-        else
+        elseif canActivate then
             buttonText = "E   ЗАПРОСИТЬ ГРУЗ"
+        else
+            buttonText = "ЗАПРОС НЕДОСТУПЕН"
         end
 
         local selected = terminalPanelState and terminalPanelState.entity == entity
@@ -236,6 +238,11 @@ end
 local function DrawBootScreen()
     if not IsValid(bootingTerminal) then
         bootingTerminal = nil
+        bootingFaction = nil
+        if IsValid(bootMusicChannel) then
+            bootMusicChannel:Stop()
+            bootMusicChannel = nil
+        end
         return
     end
 
