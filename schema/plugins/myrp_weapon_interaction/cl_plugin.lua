@@ -94,6 +94,7 @@ local function GetWeaponTarget()
 
     local itemName
     local hasItem = false
+    local isCorpse = false
 
     if (class == "ix_item") then
         local item = entity:GetItemTable()
