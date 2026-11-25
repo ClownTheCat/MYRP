@@ -6,6 +6,9 @@ util.AddNetworkString("MYRP_Supply_OpenStop")
 util.AddNetworkString("MYRP_Supply_OpenProgress")
 util.AddNetworkString("MYRP_Supply_StatusRequest")
 util.AddNetworkString("MYRP_Supply_Status")
+util.AddNetworkString("MYRP_Supply_CalibrationRequest")
+util.AddNetworkString("MYRP_Supply_CalibrationSet")
+util.AddNetworkString("MYRP_Supply_CalibrationSync")
 
 local SUPPLY = MYRP.Supply
 local cooldowns = {}
@@ -43,6 +46,57 @@ end
 local function SavePoints(points)
     ix.data.Set(GetDataKey(), points, false, true)
 end
+
+local function GetCalibrationKey()
+    return "myrp_supply_ui_" .. game.GetMap()
+end
+
+local function ReadCalibration()
+    local defaults = {
+        combine = {x = 0, y = 0, z = 0, scale = 1, rotation = 0},
+        resistance = {x = 0, y = 0, z = 0, scale = 1, rotation = 0}
+    }
+    local saved = ix.data.Get(GetCalibrationKey(), defaults, false, true)
+    if not istable(saved) then return defaults end
+    saved.combine = istable(saved.combine) and saved.combine or defaults.combine
+    saved.resistance = istable(saved.resistance) and saved.resistance or defaults.resistance
+    return saved
+end
+
+local function SendCalibration(client)
+    if not IsValid(client) then return end
+    net.Start("MYRP_Supply_CalibrationSync")
+        net.WriteTable(ReadCalibration())
+    net.Send(client)
+end
+
+net.Receive("MYRP_Supply_CalibrationRequest", function(_, client)
+    SendCalibration(client)
+end)
+
+net.Receive("MYRP_Supply_CalibrationSet", function(_, client)
+    if not IsValid(client) or not client:IsSuperAdmin() then return end
+
+    local faction = net.ReadString()
+    local config = net.ReadTable()
+    if (faction ~= "combine" and faction ~= "resistance") or not istable(config) then return end
+
+    local saved = ReadCalibration()
+    saved[faction] = {
+        x = math.Clamp(tonumber(config.x) or 0, -128, 128),
+        y = math.Clamp(tonumber(config.y) or 0, -128, 128),
+        z = math.Clamp(tonumber(config.z) or 0, -128, 128),
+        scale = math.Clamp(tonumber(config.scale) or 1, 0.5, 1.8),
+        rotation = math.Clamp(tonumber(config.rotation) or 0, -180, 180)
+    }
+    ix.data.Set(GetCalibrationKey(), saved, false, true)
+
+    net.Start("MYRP_Supply_CalibrationSync")
+        net.WriteTable(saved)
+    net.Broadcast()
+
+    Log("INFO", client:Nick() .. " updated " .. faction .. " terminal UI calibration.")
+end)
 
 local function IsTerminal(entity)
     if not IsValid(entity) then return false end
