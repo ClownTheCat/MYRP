@@ -19,6 +19,24 @@ local configs = {}
 local openingProgress = 0
 local openingTargetProgress = 0
 
+concommand.Add("myrp_supply_inspect_screen", function()
+    local client = LocalPlayer()
+    if not IsValid(client) then return end
+
+    local trace = client:GetEyeTrace()
+    print("========== MYRP SUPPLY SCREEN INSPECT ==========")
+    print("Hit:", trace.Hit, "Texture:", trace.HitTexture or "<none>")
+    if IsValid(trace.Entity) then
+        print("Entity:", trace.Entity, "Class:", trace.Entity:GetClass())
+        print("Model:", trace.Entity:GetModel())
+        print("Materials:")
+        PrintTable(trace.Entity:GetMaterials())
+    else
+        print("No valid entity under crosshair.")
+    end
+    print("================================================")
+end)
+
 surface.CreateFont("MYRP_Supply_Title", {font = "Consolas", size = 21, weight = 800, antialias = true})
 surface.CreateFont("MYRP_Supply_Body", {font = "Consolas", size = 14, weight = 600, antialias = true})
 surface.CreateFont("MYRP_Supply_Log", {font = "Consolas", size = 11, weight = 500, antialias = true})
