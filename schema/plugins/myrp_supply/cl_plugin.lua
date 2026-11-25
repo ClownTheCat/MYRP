@@ -875,12 +875,21 @@ hook.Add("Think", "MYRP.Supply.FourCornerCalibration", function()
         return
     end
 
-    if input.WasMousePressed(MOUSE_RIGHT) then
+    -- ScreenClicker can consume VGUI mouse events before WasMousePressed sees them.
+    -- Track the physical button state here so clicks are still detected reliably.
+    local leftDown = input.IsMouseDown(MOUSE_LEFT)
+    local rightDown = input.IsMouseDown(MOUSE_RIGHT)
+    local leftPressed = leftDown and not state.leftDown
+    local rightPressed = rightDown and not state.rightDown
+    state.leftDown = leftDown
+    state.rightDown = rightDown
+
+    if rightPressed then
         StopCalibration("Калибровка по четырём углам отменена.")
         return
     end
 
-    if input.WasMousePressed(MOUSE_LEFT) then
+    if leftPressed then
         local position, normal = GetCalibrationCursorHit(state)
         if not position then
             print("[MYRP:SUPPLY] Курсор должен попадать непосредственно в экран этого монитора.")
