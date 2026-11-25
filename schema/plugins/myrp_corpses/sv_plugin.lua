@@ -47,7 +47,7 @@ local function CreateBotInventory(bot)
 
     bot.ixMYRPTestInventoryCreating = true
 
-    ix.inventory.New(nil, BOT_INVENTORY, function(inventory)
+    ix.inventory.New(0, BOT_INVENTORY, function(inventory)
         if (not IsValid(bot) or not IsTestBot(bot) or not bot:Alive()) then
             if (IsValid(bot)) then
                 bot.ixMYRPTestInventoryCreating = nil
@@ -94,7 +94,7 @@ local function MoveInventoryToCorpse(client, ragdoll)
     ragdoll.ixMYRPCorpseInventoryCreating = true
     ragdoll.ixMYRPCorpseOwner = client
 
-    ix.inventory.New(nil, CORPSE_INVENTORY, function(corpseInventory)
+    ix.inventory.New(0, CORPSE_INVENTORY, function(corpseInventory)
         if (not IsValid(ragdoll)) then
             DeleteTemporaryInventory(corpseInventory)
             return
