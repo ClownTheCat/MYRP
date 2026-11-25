@@ -16,7 +16,6 @@ concommand.Add("myrp_supply_imgui_test", function()
     print("IsHovering:", isfunction(imgui.IsHovering))
     print("IsPressed:", isfunction(imgui.IsPressed))
 end)
-local activeTerminal
 local status = {available = false, remaining = 0, activeCrate = false}
 local lastStatusRequest = 0
 local loadingUntil = 0
@@ -28,7 +27,7 @@ local bootingTerminal
 local bootingFaction
 local bootStartedAt = 0
 local bootDuration = 6
-local terminalPanelState
+local terminalPanelStates = setmetatable({}, {__mode = "k"})
 local configs = {}
 local openingProgress = 0
 local openingTargetProgress = 0
@@ -100,8 +99,6 @@ local function LocalFaction()
 end
 
 local TERMINAL_PANEL_DISTANCE = 1024 -- около 20 метров
-local terminalPanelAlpha = 0
-
 local function TargetTerminal()
     local client = LocalPlayer()
     if not IsValid(client) or not client:Alive() then return end
@@ -148,7 +145,7 @@ local function GetPanelTransform(entity, faction)
     return position, angle, math.Clamp(tonumber(cfg.scale) or 1, 0.5, 1.8) * 0.075
 end
 
-local function DrawTerminalPanel(entity, faction)
+local function DrawTerminalPanel(entity, faction, panelAlpha)
     local client = LocalPlayer()
     local position, angle, scale = GetPanelTransform(entity, faction)
     local combine = faction == "combine"
@@ -171,7 +168,7 @@ local function DrawTerminalPanel(entity, faction)
     if not imgui.Entity3D2D(entity, localPosition, localAngle, scale, 300) then
         return false, false
     end
-        surface.SetAlphaMultiplier(terminalPanelAlpha)
+        surface.SetAlphaMultiplier(panelAlpha)
         draw.RoundedBox(3, -4, -4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, fitting and 8 or 24))
         draw.RoundedBox(2, 0, 0, w, h, bg)
         surface.SetDrawColor(accent.r, accent.g, accent.b, fitting and 75 or 190)
@@ -249,8 +246,8 @@ local function DrawTerminalPanel(entity, faction)
             buttonText = "ЗАПРОС НЕДОСТУПЕН"
         end
 
-        local selected = terminalPanelState and terminalPanelState.entity == entity
-            and terminalPanelState.hovered == true
+        local panelState = terminalPanelStates[entity]
+        local selected = panelState and panelState.hovered == true
         local buttonColor = selected and bright or accent
         draw.RoundedBox(2, 13, buttonY, w - 26, buttonH,
             Color(buttonColor.r, buttonColor.g, buttonColor.b, canActivate and (selected and 75 or 35) or 15))
@@ -261,13 +258,19 @@ local function DrawTerminalPanel(entity, faction)
 
         draw.SimpleText("AIM AT OPTION  //  PRESS E", "MYRP_Supply_Log",
             13, h - 10, Color(135, 155, 170))
-    local hovered = terminalPanelAlpha > 0.25 and imgui.IsHovering(13, buttonY, w - 26, buttonH)
+    local hovered = panelAlpha > 0.25 and imgui.IsHovering(13, buttonY, w - 26, buttonH)
     local clicked = hovered and canActivate and imgui.IsPressed()
     imgui.xCursor(0, 0, w, h)
     imgui.End3D2D()
     surface.SetAlphaMultiplier(1)
 
-    terminalPanelState = {entity = entity, faction = faction, hovered = hovered, clicked = clicked, canActivate = canActivate}
+    terminalPanelStates[entity] = {
+        alpha = panelAlpha,
+        faction = faction,
+        hovered = hovered,
+        clicked = clicked,
+        canActivate = canActivate
+    }
     return hovered, canActivate
 end
 
@@ -371,70 +374,104 @@ end
 
 hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.TerminalPanel3D2D", function(_, drawingSkybox)
     if drawingSkybox then return end
+
     if IsValid(bootingTerminal) then
         DrawBootScreen()
+    end
+
+    if calibrationMode then
+        local entity = calibrationMode.entity
+        if IsValid(entity) then
+            local faction = calibrationMode.faction
+            DrawTerminalPanel(entity, faction, calibrationMode.fit and 0.22 or 1)
+        end
         return
     end
-    local drawEntity = calibrationMode and calibrationMode.entity or activeTerminal
-    if not IsValid(drawEntity) then return end
 
-    local faction = FactionForModel(drawEntity)
-    if faction then
-        DrawTerminalPanel(drawEntity, faction)
+    for entity, panelState in pairs(terminalPanelStates) do
+        if not IsValid(entity) then
+            terminalPanelStates[entity] = nil
+        elseif entity ~= bootingTerminal and panelState.alpha > 0.01 then
+            local faction = panelState.faction or FactionForModel(entity)
+            if faction then
+                DrawTerminalPanel(entity, faction, panelState.alpha)
+            end
+        end
     end
 end)
 
 hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
-    if calibrationMode then return end
-    if IsValid(bootingTerminal) then return end
+    if calibrationMode or IsValid(bootingTerminal) then return end
 
-    local entity, faction, distance = TargetTerminal()
-    local fadeRate = math.Clamp(FrameTime() * 3.5, 0, 1)
+    local client = LocalPlayer()
+    if not IsValid(client) or not client:Alive() then return end
 
-    if not IsValid(entity) then
-        terminalPanelAlpha = Lerp(fadeRate, terminalPanelAlpha, 0)
-        if terminalPanelAlpha <= 0.01 then
-            terminalPanelAlpha = 0
-            activeTerminal = nil
-            terminalPanelState = nil
+    local nearby = {}
+    for _, entity in ipairs(ents.FindInSphere(client:GetPos(), TERMINAL_PANEL_DISTANCE)) do
+        local faction = FactionForModel(entity)
+        if faction then
+            local distance = client:GetPos():Distance(entity:GetPos())
+            nearby[entity] = {
+                faction = faction,
+                targetAlpha = math.Clamp(1 - distance / TERMINAL_PANEL_DISTANCE, 0, 1),
+                distance = distance
+            }
+
+            local panelState = terminalPanelStates[entity] or {alpha = 0}
+            panelState.faction = faction
+            terminalPanelStates[entity] = panelState
         end
-        lastTerminalUse = input.IsKeyDown(KEY_E)
-        return
     end
 
-    local targetAlpha = math.Clamp(1 - (distance / TERMINAL_PANEL_DISTANCE), 0, 1)
-    terminalPanelAlpha = Lerp(fadeRate, terminalPanelAlpha, targetAlpha)
+    -- Каждая панель плавно меняет прозрачность независимо от остальных.
+    local fadeRate = math.Clamp(FrameTime() * 2.0, 0, 1)
+    local nearestBootedEntity
+    local nearestBootedDistance = math.huge
 
-    if activeTerminal ~= entity then
-        activeTerminal = entity
-        terminalPanelState = nil
-        lastStatusRequest = 0
-        status = {available = false, remaining = 0, activeCrate = false}
+    for entity, panelState in pairs(terminalPanelStates) do
+        if not IsValid(entity) then
+            terminalPanelStates[entity] = nil
+        else
+            local targetAlpha = nearby[entity] and nearby[entity].targetAlpha or 0
+            panelState.alpha = Lerp(fadeRate, panelState.alpha or 0, targetAlpha)
+
+            if panelState.alpha <= 0.01 and targetAlpha == 0 then
+                terminalPanelStates[entity] = nil
+            else
+                if terminalBooted[entity] and nearby[entity]
+                    and nearby[entity].distance < nearestBootedDistance then
+                    nearestBootedEntity = entity
+                    nearestBootedDistance = nearby[entity].distance
+                end
+
+                if panelState.clicked then
+                    panelState.clicked = false
+                    if not terminalBooted[entity] then
+                        bootingTerminal = entity
+                        bootingFaction = panelState.faction
+                        bootStartedAt = CurTime()
+                    else
+                        loadingUntil = CurTime() + 1.7
+                        status.available = false
+                        status.remaining = SUPPLY.RequestCooldown
+                        if MYRP.UI and MYRP.UI.PlaySound then MYRP.UI.PlaySound("confirm") end
+                        net.Start("MYRP_Supply_Request")
+                            net.WriteEntity(entity)
+                        net.SendToServer()
+                    end
+                end
+            end
+        end
     end
 
-    if terminalBooted[entity] and CurTime() - lastStatusRequest > 1 then
+    if IsValid(nearestBootedEntity) and CurTime() - lastStatusRequest > 1 then
         lastStatusRequest = CurTime()
         net.Start("MYRP_Supply_StatusRequest")
-            net.WriteEntity(entity)
+            net.WriteEntity(nearestBootedEntity)
         net.SendToServer()
     end
 
-    local panel = terminalPanelState
-    if panel and panel.entity == entity and panel.clicked then
-        if not terminalBooted[entity] then
-            bootingTerminal = entity
-            bootingFaction = faction
-            bootStartedAt = CurTime()
-        else
-            loadingUntil = CurTime() + 1.7
-            status.available = false
-            status.remaining = SUPPLY.RequestCooldown
-            if MYRP.UI and MYRP.UI.PlaySound then MYRP.UI.PlaySound("confirm") end
-            net.Start("MYRP_Supply_Request")
-                net.WriteEntity(entity)
-            net.SendToServer()
-        end
-    end
+    lastTerminalUse = input.IsKeyDown(KEY_E)
 end)
 
 net.Receive("MYRP_Supply_Status", function()
