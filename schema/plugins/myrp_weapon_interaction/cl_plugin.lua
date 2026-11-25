@@ -2,6 +2,7 @@ local selectedAction = 1
 local selectedEntity
 local pendingUseEntity
 local pendingUseHasItem = false
+local pendingUseIsCorpse = false
 local pendingUseTime = 0
 local physicalHoldActive = false
 local physicalHoldPending = false
@@ -103,6 +104,10 @@ local function GetWeaponTarget()
 
         itemName = item:GetName() or "Предмет"
         hasItem = true
+    elseif (class == "prop_ragdoll" and entity:GetNW2Bool("myrp_corpse", false)) then
+        itemName = entity:GetNW2String("myrp_corpse_name", "Труп")
+        hasItem = true
+        isCorpse = true
     elseif (IsWeaponEntity(entity)) then
         for _, item in pairs(ix.item.list or {}) do
             if (item.isWeapon and item.class == class) then
@@ -127,7 +132,7 @@ local function GetWeaponTarget()
         return
     end
 
-    return entity, itemName, hasItem
+    return entity, itemName, hasItem, isCorpse == true
 end
 
 local menuProgress = 0
@@ -228,8 +233,9 @@ local function DrawWeaponMenuPanel(x, y, width, height, theme, accent, alpha)
 end
 
 hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
-    local entity, itemName, hasItem = GetWeaponTarget()
+    local entity, itemName, hasItem, isCorpse = GetWeaponTarget()
     local targetVisible = IsValid(entity)
+    local currentActionNames = isCorpse and {"Тащить", "Залезть в карманы"} or actionNames
 
     if (targetVisible) then
         if (selectedEntity != entity) then
@@ -298,7 +304,7 @@ hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
         drawX + 20, drawY + 78, Color(125, 151, 174, alpha),
         TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
-    for i = 1, #actionNames do
+    for i = 1, #currentActionNames do
         local selected = selectedAction == i
         local enabled = targetVisible and hasItem
         local targetRowProgress = selected and 1 or 0
@@ -327,7 +333,7 @@ hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
         end
 
         local prefix = selected and "›" or "·"
-        draw.SimpleText(prefix .. "  " .. actionNames[i], "MYRP_WeaponMenu_Body",
+        draw.SimpleText(prefix .. "  " .. currentActionNames[i], "MYRP_WeaponMenu_Body",
             drawX + 25, rowY + 12, textColor,
             TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
@@ -341,7 +347,7 @@ hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
     surface.SetDrawColor(accent.r, accent.g, accent.b, math.floor(alpha * 0.24))
     surface.DrawLine(drawX + 18, drawY + 151, drawX + width - 18, drawY + 151)
 
-    draw.SimpleText("УДЕРЖИВАЙ E  /  ФИЗИЧЕСКИ ПОДНЯТЬ", "MYRP_WeaponMenu_Hint",
+    draw.SimpleText(isCorpse and "УДЕРЖИВАЙ E  /  ТАЩИТЬ" or "УДЕРЖИВАЙ E  /  ФИЗИЧЕСКИ ПОДНЯТЬ", "MYRP_WeaponMenu_Hint",
         drawX + 19, drawY + 166, Color(205, 217, 228, alpha),
         TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
@@ -381,6 +387,7 @@ hook.Add("Think", "MYRP_PhysicalHold_Client", function()
         !physicalHoldActive and
         !physicalHoldPending and
         CurTime() - pendingUseTime >= 0.25 and
+        (!pendingUseIsCorpse or selectedAction == 1) and
         input.IsKeyDown(KEY_E)
     ) then
         SendHoldOperation("start", pendingUseEntity)
@@ -422,12 +429,13 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
         if (pressed) then
             if (IsValid(pendingUseEntity)) then return true end
 
-            local entity, _, hasItem = GetWeaponTarget()
+            local entity, _, hasItem, isCorpse = GetWeaponTarget()
 
             if (!IsValid(entity)) then return end
 
             pendingUseEntity = entity
             pendingUseHasItem = hasItem
+            pendingUseIsCorpse = isCorpse
             pendingUseTime = CurTime()
 
             return true
@@ -435,6 +443,7 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
 
         if (!IsValid(pendingUseEntity)) then
             pendingUseEntity = nil
+            pendingUseIsCorpse = false
             return
         end
 
@@ -443,11 +452,28 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
             physicalHoldActive = false
             physicalHoldPending = false
             pendingUseEntity = nil
+            pendingUseIsCorpse = false
             return true
         end
 
         local entity = pendingUseEntity
+        local isCorpse = pendingUseIsCorpse
         pendingUseEntity = nil
+        pendingUseIsCorpse = false
+
+        if (isCorpse) then
+            if (selectedAction == 1) then
+                PlayUI("denied")
+                return true
+            end
+
+            PlayUI("confirm")
+            net.Start("MYRP_WeaponInteraction_Action")
+                net.WriteEntity(entity)
+                net.WriteString("pockets")
+            net.SendToServer()
+            return true
+        end
 
         if (!pendingUseHasItem) then
             PlayUI("denied")
