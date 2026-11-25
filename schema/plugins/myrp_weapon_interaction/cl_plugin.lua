@@ -12,6 +12,33 @@ local actionNames = {
     "Положить в инвентарь"
 }
 
+local blockedWorldClasses = {
+    gmod_tool = true,
+    weapon_physgun = true
+}
+
+local supportedEntityClasses = {
+    item_healthkit = true,
+    item_healthvial = true,
+    item_battery = true,
+    item_ammo_357 = true,
+    item_ammo_357_large = true,
+    item_ammo_ar2 = true,
+    item_ammo_ar2_large = true,
+    item_ammo_smg1 = true,
+    item_ammo_smg1_large = true,
+    item_box_buckshot = true,
+    item_ammo_pistol = true,
+    item_ammo_pistol_large = true,
+    item_ammo_smg1_grenade = true,
+    item_rpg_round = true,
+    item_ammo_crossbow = true,
+    item_ammo_ar2_altfire = true,
+    npc_grenade_frag = true,
+    combine_mine = true,
+    combine_mine_resistance = true
+}
+
 local function PlayUI(kind)
     if (MYRP and MYRP.UI and MYRP.UI.PlaySound) then
         MYRP.UI.PlaySound(kind)
@@ -22,6 +49,8 @@ local function IsWeaponEntity(entity)
     if (!IsValid(entity)) then return false end
 
     local class = entity:GetClass()
+    if (blockedWorldClasses[class]) then return false end
+
     return class == "gmod_camera" or (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
 end
 
@@ -31,14 +60,18 @@ local function IsPhysicalWorldObject(entity)
     if (entity.IsVehicle and entity:IsVehicle()) then return false end
 
     local class = entity:GetClass()
-    if (class == "gmod_tool" or class == "ix_item" or IsWeaponEntity(entity)) then return false end
+    if (blockedWorldClasses[class] or class == "ix_item" or IsWeaponEntity(entity)) then return false end
     if (string.StartWith(class, "prop_vehicle") or string.StartWith(class, "vehicle_")) then return false end
     if (string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
 
+    local model = entity:GetModel()
+    if (!isstring(model) or !util.IsValidModel(model)) then return false end
+
+    -- Listed HL2 pickups may have no VPhysics object, but can still be stored.
+    if (supportedEntityClasses[class]) then return true end
+
     local physics = entity:GetPhysicsObject()
-    return isstring(entity:GetModel()) and util.IsValidModel(entity:GetModel())
-        and entity:GetMoveType() == MOVETYPE_VPHYSICS
-        and IsValid(physics)
+    return entity:GetMoveType() == MOVETYPE_VPHYSICS and IsValid(physics)
 end
 
 local function GetWeaponTarget()
@@ -56,7 +89,7 @@ local function GetWeaponTarget()
     end
 
     local class = entity:GetClass()
-    if (class == "gmod_tool") then return end
+    if (blockedWorldClasses[class]) then return end
 
     local itemName
     local hasItem = false
@@ -64,7 +97,7 @@ local function GetWeaponTarget()
     if (class == "ix_item") then
         local item = entity:GetItemTable()
 
-        if (!item or (!item.isWeapon and item.uniqueID != "myrp_world_object")) then
+        if (!item or blockedWorldClasses[item.class] or (!item.isWeapon and item.uniqueID != "myrp_world_object")) then
             return
         end
 
@@ -493,6 +526,8 @@ local function IsMYRPWeaponEntity(entity)
         local item = entity:GetItemTable()
         return item and (item.isWeapon == true or item.uniqueID == "myrp_world_object") or false
     end
+
+    if (blockedWorldClasses[class]) then return false end
 
     return (entity.IsWeapon and entity:IsWeapon())
         or string.sub(class, 1, 7) == "weapon_"
