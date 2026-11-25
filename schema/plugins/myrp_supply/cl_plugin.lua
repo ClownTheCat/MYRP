@@ -814,14 +814,20 @@ local function FinishFourCornerCalibration(state)
         normal = -normal
     end
 
-    -- Validate the actual point geometry instead of comparing triangle normals.
-    -- A small tolerance allows minor mesh irregularities on the monitor glass.
-    for _, point in ipairs(points) do
+    -- Report each corner's distance from the plane defined by the measured screen axes.
+    -- The screen mesh has bevels, so allow a modest geometric tolerance.
+    local maxDeviation = 0
+    for index, point in ipairs(points) do
         local deviation = math.abs((point.position - topLeft):Dot(normal))
-        if deviation > 4 then
-            StopCalibration("Углы не лежат на одной плоскости. Проверь, что выбраны именно четыре угла экрана.")
-            return
-        end
+        maxDeviation = math.max(maxDeviation, deviation)
+        print(string.format("[MYRP:SUPPLY] Отклонение угла %d от плоскости: %.2f units", index, deviation))
+    end
+    if maxDeviation > 12 then
+        StopCalibration(string.format(
+            "Точки слишком сильно отличаются по глубине (макс. %.2f units). Пришли значения отклонений из консоли.",
+            maxDeviation
+        ))
+        return
     end
 
     local width = (topLeft:Distance(topRight) + bottomLeft:Distance(bottomRight)) * 0.5
