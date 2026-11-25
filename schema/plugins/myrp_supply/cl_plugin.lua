@@ -25,9 +25,28 @@ local function Config(faction)
 end
 
 local function SaveConfig(faction)
-    file.CreateDir("myrp")
-    file.Write("myrp/supply_ui_" .. faction .. ".json", util.TableToJSON(Config(faction), true))
+    net.Start("MYRP_Supply_CalibrationSet")
+        net.WriteString(faction)
+        net.WriteTable(Config(faction))
+    net.SendToServer()
 end
+
+net.Receive("MYRP_Supply_CalibrationSync", function()
+    local saved = net.ReadTable()
+    if not istable(saved) then return end
+    for _, faction in ipairs({"combine", "resistance"}) do
+        if istable(saved[faction]) then
+            configs[faction] = saved[faction]
+        end
+    end
+end)
+
+hook.Add("InitPostEntity", "MYRP.Supply.RequestCalibration", function()
+    timer.Simple(2, function()
+        net.Start("MYRP_Supply_CalibrationRequest")
+        net.SendToServer()
+    end)
+end)
 
 local function FactionForModel(entity)
     if not IsValid(entity) then return nil end
