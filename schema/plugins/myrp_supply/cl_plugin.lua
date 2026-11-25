@@ -22,6 +22,10 @@ local loadingUntil = 0
 local lastTerminalUse = false
 local lastCrateUse = false
 local openingSound
+local bootSound
+local function StopBootSound()
+    if bootSound then bootSound:Stop() bootSound = nil end
+end
 local terminalBooted = setmetatable({}, {__mode = "k"})
 local bootingTerminal
 local bootingFaction
@@ -260,7 +264,6 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
         draw.SimpleText("AIM AT OPTION  //  PRESS E", "MYRP_Supply_Log",
             13, h - 10, Color(135, 155, 170))
     local hovered = panelOpacity > 0.25 and imgui.IsHovering(13, buttonY, w - 26, buttonH)
-    local clicked = hovered and canActivate and imgui.IsPressed()
     imgui.xCursor(0, 0, w, h)
     imgui.End3D2D()
     surface.SetAlphaMultiplier(1)
@@ -268,7 +271,6 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
     local panelState = terminalPanelStates[entity] or {alpha = panelOpacity}
     panelState.faction = faction
     panelState.hovered = hovered
-    panelState.clicked = clicked
     panelState.canActivate = canActivate
     terminalPanelStates[entity] = panelState
     return hovered, canActivate
@@ -278,6 +280,7 @@ local function DrawBootScreen()
     if not IsValid(bootingTerminal) then
         bootingTerminal = nil
         bootingFaction = nil
+        StopBootSound()
         return
     end
 
@@ -364,10 +367,7 @@ local function DrawBootScreen()
         bootingTerminal = nil
         bootingFaction = nil
         lastStatusRequest = 0
-        if IsValid(bootMusicChannel) then
-            bootMusicChannel:Stop()
-            bootMusicChannel = nil
-        end
+        StopBootSound()
         surface.PlaySound("buttons/button14.wav")
     end
 end
@@ -401,11 +401,21 @@ hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.TerminalPanel3D2D", func
 end)
 
 hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
-    if calibrationMode or IsValid(bootingTerminal) then return end
+    local useDown = input.IsKeyDown(KEY_E)
+    if calibrationMode or IsValid(bootingTerminal) then
+        lastTerminalUse = useDown
+        return
+    end
 
     local client = LocalPlayer()
-    if not IsValid(client) or not client:Alive() then return end
+    if not IsValid(client) or not client:Alive() then
+        lastTerminalUse = useDown
+        return
+    end
 
+    local usePressed = useDown and not lastTerminalUse
+    local hoveredTerminal
+    local hoveredTerminalDistance = math.huge
     local nearby = {}
     for _, entity in ipairs(ents.FindInSphere(client:GetPos(), TERMINAL_PANEL_DISTANCE)) do
         local faction = FactionForModel(entity)
@@ -423,7 +433,6 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
         end
     end
 
-    -- Каждая панель плавно меняет прозрачность независимо от остальных.
     local fadeRate = math.Clamp(FrameTime() * 2.0, 0, 1)
     local nearestBootedEntity
     local nearestBootedDistance = math.huge
@@ -444,23 +453,33 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
                     nearestBootedDistance = nearby[entity].distance
                 end
 
-                if panelState.clicked then
-                    panelState.clicked = false
-                    if not terminalBooted[entity] then
-                        bootingTerminal = entity
-                        bootingFaction = panelState.faction
-                        bootStartedAt = CurTime()
-                    else
-                        loadingUntil = CurTime() + 1.7
-                        status.available = false
-                        status.remaining = SUPPLY.RequestCooldown
-                        if MYRP.UI and MYRP.UI.PlaySound then MYRP.UI.PlaySound("confirm") end
-                        net.Start("MYRP_Supply_Request")
-                            net.WriteEntity(entity)
-                        net.SendToServer()
+                if panelState.hovered and panelState.canActivate and panelState.alpha > 0.25 then
+                    local distance = nearby[entity] and nearby[entity].distance or math.huge
+                    if distance < hoveredTerminalDistance then
+                        hoveredTerminal = entity
+                        hoveredTerminalDistance = distance
                     end
                 end
             end
+        end
+    end
+
+    if usePressed and IsValid(hoveredTerminal) then
+        if not terminalBooted[hoveredTerminal] then
+            bootingTerminal = hoveredTerminal
+            bootingFaction = FactionForModel(hoveredTerminal)
+            bootStartedAt = CurTime()
+            StopBootSound()
+            bootSound = CreateSound(client, "ambient/levels/labs/equipment_printer_loop1.wav")
+            if bootSound then bootSound:PlayEx(0.55, 95) end
+        else
+            loadingUntil = CurTime() + 1.7
+            status.available = false
+            status.remaining = SUPPLY.RequestCooldown
+            if MYRP.UI and MYRP.UI.PlaySound then MYRP.UI.PlaySound("confirm") end
+            net.Start("MYRP_Supply_Request")
+                net.WriteEntity(hoveredTerminal)
+            net.SendToServer()
         end
     end
 
@@ -471,7 +490,7 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
         net.SendToServer()
     end
 
-    lastTerminalUse = input.IsKeyDown(KEY_E)
+    lastTerminalUse = useDown
 end)
 
 net.Receive("MYRP_Supply_Status", function()
@@ -563,6 +582,18 @@ timer.Create("MYRP.Supply.CacheCrates", 0.5, 0, function()
         end
     end
     cachedSupplyCrates = found
+end)
+
+hook.Add("PreDrawHalos", "MYRP.Supply.CrateFactionHalo", function()
+    for entity in pairs(cachedSupplyCrates) do
+        if IsValid(entity) then
+            local faction = entity:GetNW2String("MYRP_SupplyFaction", "")
+            if faction == "combine" or faction == "resistance" then
+                local color = faction == "combine" and Color(75, 165, 255) or Color(235, 135, 75)
+                halo.Add({entity}, color, 3, 3, 2, true, true)
+            end
+        end
+    end
 end)
 
 hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.CrateFactionOutline", function()
