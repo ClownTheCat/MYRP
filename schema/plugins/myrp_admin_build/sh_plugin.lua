@@ -38,7 +38,8 @@ if SERVER then
     -- Props are reserved for SuperAdmins; other build permissions remain unchanged.
     hook.Add("PlayerSpawnProp", "MYRP.AdminBuildAccess.PlayerSpawnProp", function(client)
         if (IsValid(client) and client:IsSuperAdmin()) then
-            return
+            -- Explicitly allow the spawn so Helix's GM:PlayerSpawnProp flag check is bypassed.
+            return true
         end
 
         if (IsValid(client)) then
