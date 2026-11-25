@@ -7,6 +7,12 @@ local pendingUseTime = 0
 local physicalHoldActive = false
 local physicalHoldPending = false
 local weaponSelectPatchApplied = false
+local lastCorpseTraceSignature = ""
+
+local function CorpseClientLog(message)
+    MsgC(Color(115, 185, 225), "[MYRP:CORPSES][CLIENT] ",
+        color_white, tostring(message) .. "\n")
+end
 
 local actionNames = {
     "Взять в руки",
@@ -91,6 +97,20 @@ local function GetWeaponTarget()
 
     local class = entity:GetClass()
     if (blockedWorldClasses[class]) then return end
+
+    if (class == "prop_ragdoll") then
+        local signature = tostring(entity:EntIndex()) .. "|"
+            .. tostring(entity:GetNW2Bool("myrp_corpse", false)) .. "|"
+            .. entity:GetNW2String("myrp_corpse_name", "")
+        if (signature != lastCorpseTraceSignature) then
+            lastCorpseTraceSignature = signature
+            CorpseClientLog("Trace ragdoll: ent=" .. entity:EntIndex()
+                .. ", marked=" .. tostring(entity:GetNW2Bool("myrp_corpse", false))
+                .. ", name=" .. entity:GetNW2String("myrp_corpse_name", "<none>"))
+        end
+    elseif (lastCorpseTraceSignature != "") then
+        lastCorpseTraceSignature = ""
+    end
 
     local itemName
     local hasItem = false
@@ -440,6 +460,11 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
             pendingUseIsCorpse = isCorpse
             pendingUseTime = CurTime()
 
+            CorpseClientLog("E down: " .. entity:GetClass() .. "#" .. entity:EntIndex()
+                .. ", corpse=" .. tostring(isCorpse)
+                .. ", hasItem=" .. tostring(hasItem)
+                .. ", selectedAction=" .. tostring(selectedAction))
+
             return true
         end
 
@@ -464,6 +489,10 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
         pendingUseIsCorpse = false
 
         if (isCorpse) then
+            CorpseClientLog("E up: entityValid=" .. tostring(IsValid(entity))
+                .. ", selectedAction=" .. tostring(selectedAction)
+                .. ", ent=" .. tostring(IsValid(entity) and entity:EntIndex() or -1))
+
             if (selectedAction == 1) then
                 PlayUI("denied")
                 return true
@@ -474,6 +503,7 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
                 net.WriteEntity(entity)
                 net.WriteString("pockets")
             net.SendToServer()
+            CorpseClientLog("Sent pockets action to server.")
             return true
         end
 
@@ -563,6 +593,11 @@ end
 
 hook.Add("ShouldPopulateEntityInfo", "MYRP_WeaponInteraction_HideHelixWeaponInfo", function(entity)
     if (IsMYRPWeaponEntity(entity)) then
+        return false
+    end
+
+    if (IsValid(entity) and entity:IsPlayer() and entity:IsBot()
+        and entity:GetNW2Bool("myrp_testbot_dead", false)) then
         return false
     end
 end)
