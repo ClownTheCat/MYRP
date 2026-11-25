@@ -1,3 +1,4 @@
+ITEM.isWeapon = true
 ITEM.name = "Pistol"
 ITEM.description = "Стандартный пистолет."
 ITEM.model = "models/weapons/w_pistol.mdl"
