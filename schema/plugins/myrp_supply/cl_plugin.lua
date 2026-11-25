@@ -152,8 +152,9 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
     local accent = combine and Color(105, 180, 245) or Color(218, 145, 91)
     local bright = combine and Color(174, 218, 255) or Color(245, 188, 132)
     local fitting = calibrationMode and calibrationMode.entity == entity and calibrationMode.fit
-    local panelAlpha = fitting and 55 or 245
-    local bg = combine and Color(5, 14, 24, panelAlpha) or Color(19, 13, 10, panelAlpha)
+    local panelOpacity = fitting and 0.22 or math.Clamp(tonumber(panelAlpha) or 1, 0, 1)
+    local bgAlpha = fitting and 55 or 245
+    local bg = combine and Color(5, 14, 24, bgAlpha) or Color(19, 13, 10, bgAlpha)
     local authorized = LocalFaction() == faction
     -- The CRT display area is nearly square, so use a matching logical canvas.
     local w, h = 360, 344
@@ -168,7 +169,7 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
     if not imgui.Entity3D2D(entity, localPosition, localAngle, scale, 300) then
         return false, false
     end
-        surface.SetAlphaMultiplier(panelAlpha)
+        surface.SetAlphaMultiplier(panelOpacity)
         draw.RoundedBox(3, -4, -4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, fitting and 8 or 24))
         draw.RoundedBox(2, 0, 0, w, h, bg)
         surface.SetDrawColor(accent.r, accent.g, accent.b, fitting and 75 or 190)
@@ -258,19 +259,18 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
 
         draw.SimpleText("AIM AT OPTION  //  PRESS E", "MYRP_Supply_Log",
             13, h - 10, Color(135, 155, 170))
-    local hovered = panelAlpha > 0.25 and imgui.IsHovering(13, buttonY, w - 26, buttonH)
+    local hovered = panelOpacity > 0.25 and imgui.IsHovering(13, buttonY, w - 26, buttonH)
     local clicked = hovered and canActivate and imgui.IsPressed()
     imgui.xCursor(0, 0, w, h)
     imgui.End3D2D()
     surface.SetAlphaMultiplier(1)
 
-    terminalPanelStates[entity] = {
-        alpha = panelAlpha,
-        faction = faction,
-        hovered = hovered,
-        clicked = clicked,
-        canActivate = canActivate
-    }
+    local panelState = terminalPanelStates[entity] or {alpha = panelOpacity}
+    panelState.faction = faction
+    panelState.hovered = hovered
+    panelState.clicked = clicked
+    panelState.canActivate = canActivate
+    terminalPanelStates[entity] = panelState
     return hovered, canActivate
 end
 
