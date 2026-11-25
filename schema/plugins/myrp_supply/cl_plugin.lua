@@ -11,6 +11,7 @@ local openingSound
 local clicker = false
 local configs = {}
 local openingProgress = 0
+local openingTargetProgress = 0
 
 surface.CreateFont("MYRP_Supply_Title", {font = "Consolas", size = 21, weight = 800, antialias = true})
 surface.CreateFont("MYRP_Supply_Body", {font = "Consolas", size = 14, weight = 600, antialias = true})
@@ -136,7 +137,7 @@ local function DrawTerminal(entity, faction)
     if not authorized then
         statusText, statusColor = "ACCESS DENIED // WRONG FACTION", Color(255, 125, 125)
     elseif CurTime() < loadingUntil then
-        statusText, statusColor = "ОТПРАВЛЯЮ ЗАПРОС...", Color(240, 205, 125)
+        statusText, statusColor = "ОТПРАВЛЯЮ ЗАПРОС" .. string.rep(".", math.floor(CurTime() * 3) % 4), Color(240, 205, 125)
     elseif status.activeCrate then
         statusText, statusColor = "ЗАПРОС НЕДОСТУПЕН // ГРУЗ В ПОЛЕ", Color(255, 150, 150)
     elseif status.available then
@@ -145,6 +146,13 @@ local function DrawTerminal(entity, faction)
         statusText, statusColor = "ЗАПРОС ГРУЗА НЕДОСТУПЕН  " .. TimeString(status.remaining), Color(255, 155, 155)
     end
     draw.SimpleText(statusText, "MYRP_Supply_Body", x + 13, y + 148, statusColor)
+
+    if CurTime() < loadingUntil then
+        local loadX, loadY, loadW = x + 13, y + 158, w - 26
+        draw.RoundedBox(1, loadX, loadY, loadW, 3, Color(50, 55, 60, 180))
+        local loadProgress = math.Clamp(1 - (loadingUntil - CurTime()) / 1.7, 0, 1)
+        draw.RoundedBox(1, loadX, loadY, loadW * loadProgress, 3, accent)
+    end
 
     local bx, by, bw, bh = x + 13, y + 169, w - 26, 34
     local mx, my = gui.MousePos()
@@ -215,7 +223,7 @@ net.Receive("MYRP_Supply_Status", function()
 end)
 
 net.Receive("MYRP_Supply_OpenProgress", function()
-    openingProgress = net.ReadFloat()
+    openingTargetProgress = net.ReadFloat()
     local state = net.ReadString()
 
     if state == "progress" then
@@ -261,6 +269,8 @@ hook.Add("HUDPaint", "MYRP.Supply.CrateInteraction", function()
 
     local bx, by, bw, bh = x + 13, y + 65, w - 26, 16
     draw.RoundedBox(2, bx, by, bw, bh, Color(48, 20, 23, 230))
+    local returnRate = openingTargetProgress < openingProgress and 1.8 or 10
+    openingProgress = Lerp(math.Clamp(FrameTime() * returnRate, 0, 1), openingProgress, openingTargetProgress)
     local progress = math.Clamp(openingProgress, 0, 1)
     local shake = math.sin(CurTime() * 35) * progress * 2.2
     if progress > 0 then
