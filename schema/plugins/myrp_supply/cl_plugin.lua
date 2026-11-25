@@ -324,6 +324,16 @@ local function DrawBootScreen()
     end
 end
 
+hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.TerminalPanel3D2D", function(_, drawingSkybox)
+    if drawingSkybox or IsValid(bootingTerminal) then return end
+    if not IsValid(activeTerminal) then return end
+
+    local faction = FactionForModel(activeTerminal)
+    if faction then
+        DrawTerminalPanel(activeTerminal, faction)
+    end
+end)
+
 hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
     if IsValid(bootingTerminal) then
         DrawBootScreen()
@@ -351,7 +361,6 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
         net.SendToServer()
     end
 
-    DrawTerminalPanel(entity, faction)
     local useDown = input.IsKeyDown(KEY_E)
     local panel = terminalPanelState
     if useDown and not lastTerminalUse and panel and panel.entity == entity and panel.hovered and panel.canActivate then
