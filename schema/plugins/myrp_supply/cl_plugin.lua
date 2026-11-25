@@ -169,7 +169,11 @@ local function DrawTerminalPanel(entity, faction)
     local booted = terminalBooted[entity] == true
     local loadingRequest = now < loadingUntil
 
-    cam.Start3D2D(position, angle, scale)
+    local localPosition = entity:WorldToLocal(position)
+    local localAngle = entity:WorldToLocalAngles(angle)
+    if not imgui.Entity3D2D(entity, localPosition, localAngle, scale, 300) then
+        return false, false
+    end
         draw.RoundedBox(3, -4, -4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, 24))
         draw.RoundedBox(2, 0, 0, w, h, bg)
         surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
@@ -259,17 +263,9 @@ local function DrawTerminalPanel(entity, faction)
 
         draw.SimpleText("AIM AT OPTION  //  PRESS E", "MYRP_Supply_Log",
             13, h - 10, Color(135, 155, 170))
-    cam.End3D2D()
-
-    -- Intersect the player's aim ray with the floating panel to select its single action.
-    local hit = util.IntersectRayWithPlane(client:EyePos(), client:GetAimVector(), position, angle:Forward())
-    local hovered = false
-    if hit then
-        local delta = hit - position
-        local localX = delta:Dot(angle:Right()) / scale
-        local localY = -delta:Dot(angle:Up()) / scale
-        hovered = localX >= 13 and localX <= w - 13 and localY >= buttonY and localY <= buttonY + buttonH
-    end
+    local hovered = imgui.IsHovering(13, buttonY, w - 26, buttonH)
+    imgui.xCursor(0, 0, w, h)
+    imgui.End3D2D()
 
     terminalPanelState = {entity = entity, faction = faction, hovered = hovered, canActivate = canActivate}
     return hovered, canActivate
