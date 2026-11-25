@@ -214,9 +214,7 @@ net.Receive("MYRP_Supply_OpenProgress", function()
         openingSound = nil
     end
 
-    if state == "cancelled" and MYRP.UI and MYRP.UI.PlaySound then
-        MYRP.UI.PlaySound("denied")
-    end
+
 end)
 
 hook.Add("HUDPaint", "MYRP.Supply.CrateInteraction", function()
@@ -226,7 +224,10 @@ hook.Add("HUDPaint", "MYRP.Supply.CrateInteraction", function()
     local faction = IsValid(entity) and entity:GetNW2String("MYRP_SupplyFaction", "") or ""
 
     if not IsValid(entity) or (faction ~= "combine" and faction ~= "resistance")
-        or client:GetPos():DistToSqr(entity:GetPos()) > 150 * 150 then return end
+        or client:GetPos():DistToSqr(entity:GetPos()) > 150 * 150 then
+        lastCrateUse = input.IsKeyDown(KEY_E)
+        return
+    end
 
     local accent = faction == "combine" and Color(115, 185, 250) or Color(220, 150, 95)
     local w, h = 330, 94
