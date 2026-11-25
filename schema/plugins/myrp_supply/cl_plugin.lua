@@ -29,7 +29,6 @@ local bootingFaction
 local bootStartedAt = 0
 local bootDuration = 6
 local terminalPanelState
-local bootMusicChannel
 local configs = {}
 local openingProgress = 0
 local openingTargetProgress = 0
@@ -276,10 +275,6 @@ local function DrawBootScreen()
     if not IsValid(bootingTerminal) then
         bootingTerminal = nil
         bootingFaction = nil
-        if IsValid(bootMusicChannel) then
-            bootMusicChannel:Stop()
-            bootMusicChannel = nil
-        end
         return
     end
 
@@ -430,18 +425,6 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
             bootingTerminal = entity
             bootingFaction = faction
             bootStartedAt = CurTime()
-            if sound and sound.PlayFile then
-                sound.PlayFile("sound/music/hl2_song15.mp3", "noplay", function(channel, errorCode)
-                    if IsValid(channel) and IsValid(bootingTerminal) then
-                        bootMusicChannel = channel
-                        channel:Play()
-                    else
-                        surface.PlaySound("buttons/combine_button1.wav")
-                    end
-                end)
-            else
-                surface.PlaySound("buttons/combine_button1.wav")
-            end
         else
             loadingUntil = CurTime() + 1.7
             status.available = false
