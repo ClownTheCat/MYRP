@@ -13,6 +13,7 @@ util.AddNetworkString("MYRP_Supply_CalibrationSync")
 local SUPPLY = MYRP.Supply
 local cooldowns = {}
 local activeCrates = {}
+local pendingDeliveries = {}
 local openingPlayers = {}
 
 local function Log(level, message)
@@ -284,10 +285,10 @@ local function BroadcastSupplyRequest(faction)
     for _, target in ipairs(player.GetAll()) do
         if IsValid(target) then
             if GetFactionID(target) == faction then
-                target:ChatPrint("[Снабжение] Ваша фракция запросила груз. Ожидайте доставку через 30 секунд.")
+                target:ChatPrint("[Снабжение] Ваша фракция запросила груз. Ящик прибудет на точку сброса через 30 секунд.")
             else
                 target:ChatPrint("[Радиоперехват] ВНИМАНИЕ: другая фракция (" .. factionName
-                    .. ") вызвала груз. Он прибудет через 30 секунд!")
+                    .. ") запросила снабжение. Ящик прибудет через 30 секунд!")
             end
         end
     end
@@ -441,12 +442,17 @@ local function SendSupplyStatus(client, faction)
 
     local nextAllowed = cooldowns[faction] or 0
     local remaining = math.max(0, nextAllowed - CurTime())
-    local available = remaining <= 0 and not IsValid(activeCrates[faction])
+    local deliveryRemaining = math.max(0, (pendingDeliveries[faction] or 0) - CurTime())
+    local deliveryPending = deliveryRemaining > 0
+    local activeCrate = IsValid(activeCrates[faction])
+    local available = remaining <= 0 and not activeCrate and not deliveryPending
 
     net.Start("MYRP_Supply_Status")
         net.WriteBool(available)
         net.WriteFloat(remaining)
-        net.WriteBool(IsValid(activeCrates[faction]))
+        net.WriteBool(activeCrate)
+        net.WriteBool(deliveryPending)
+        net.WriteFloat(deliveryRemaining)
     net.Send(client)
 end
 
@@ -498,10 +504,14 @@ net.Receive("MYRP_Supply_Request", function(_, client)
     end
 
     cooldowns[faction] = now + SUPPLY.RequestCooldown
-    client:ChatPrint("[Снабжение] Запрос отправлен. Ожидайте подтверждения доставки.")
+    pendingDeliveries[faction] = now + SUPPLY.DeliveryDelay
+    client:ChatPrint("[Снабжение] Запрос отправлен. Ящик прибудет на точку сброса через 30 секунд.")
     BroadcastSupplyRequest(faction)
 
-    timer.Simple(SUPPLY.DeliveryDelay, function()
+    local deliveryTimer = "MYRP.Supply.Deliver." .. faction
+    timer.Remove(deliveryTimer)
+    timer.Create(deliveryTimer, SUPPLY.DeliveryDelay, 1, function()
+        pendingDeliveries[faction] = nil
         if not game or not game.GetMap then return end
 
         local currentPoints = ReadPoints()
@@ -660,6 +670,11 @@ hook.Add("MYRP_MatchResetCleanup", "MYRP.Supply.CleanupRound", function()
         activeCrates[faction] = nil
     end
 
+    for _, faction in ipairs({"combine", "resistance"}) do
+        timer.Remove("MYRP.Supply.Deliver." .. faction)
+    end
+    pendingDeliveries = {}
+
     for client in pairs(openingPlayers) do
         CancelOpening(client, false)
     end
@@ -677,6 +692,7 @@ end)
 hook.Add("InitPostEntity", "MYRP.Supply.ClearTransientState", function()
     cooldowns = {}
     activeCrates = {}
+    pendingDeliveries = {}
     openingPlayers = {}
 end)
 
