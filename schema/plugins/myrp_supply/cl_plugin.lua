@@ -1188,6 +1188,26 @@ concommand.Add("myrp_supply_ui_rotate", function(_, _, args)
     PrintCalibration(faction)
 end)
 
+-- Incremental rotation commands: each changes only its own axis.
+for _, axis in ipairs({"pitch", "yaw", "roll"}) do
+    concommand.Add("myrp_supply_ui_" .. axis, function(_, _, args)
+        local faction = CalibrationFaction()
+        if not faction then return end
+
+        local amount = tonumber(args[1])
+        if not amount then
+            print("[MYRP:SUPPLY] Usage: myrp_supply_ui_" .. axis .. " <degrees, e.g. 1 or -1>")
+            return
+        end
+
+        local cfg = Config(faction)
+        cfg[axis] = math.Clamp((tonumber(cfg[axis]) or 0) + amount, -180, 180)
+        cfg.surface = true
+        SaveConfig(faction)
+        PrintCalibration(faction)
+    end)
+end
+
 concommand.Add("myrp_supply_ui_scale", function(_, _, args)
     local faction = CalibrationFaction()
     if not faction then return end
