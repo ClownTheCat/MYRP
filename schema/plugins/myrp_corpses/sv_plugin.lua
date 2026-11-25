@@ -49,6 +49,10 @@ local function CreateBotInventory(bot)
 
     ix.inventory.New(nil, BOT_INVENTORY, function(inventory)
         if (not IsValid(bot) or not IsTestBot(bot) or not bot:Alive()) then
+            if (IsValid(bot)) then
+                bot.ixMYRPTestInventoryCreating = nil
+            end
+
             DeleteTemporaryInventory(inventory)
             return
         end
@@ -97,6 +101,7 @@ local function MoveInventoryToCorpse(client, ragdoll)
         end
 
         ragdoll.ixMYRPCorpseInventory = corpseInventory
+        ragdoll:SetUseType(SIMPLE_USE)
 
         local items = source:GetItems(true)
         local moved = 0
@@ -146,6 +151,18 @@ hook.Add("CreateEntityRagdoll", "MYRP_CorpseLooting_CreateRagdoll", function(cli
 
     timer.Simple(0, function()
         if (IsValid(client) and IsValid(ragdoll)) then
+            MoveInventoryToCorpse(client, ragdoll)
+        end
+    end)
+end)
+
+hook.Add("PlayerDeath", "MYRP_CorpseLooting_DeathFallback", function(client)
+    timer.Simple(0.2, function()
+        if (not IsValid(client)) then return end
+
+        local ragdoll = client:GetRagdollEntity()
+
+        if (IsValid(ragdoll)) then
             MoveInventoryToCorpse(client, ragdoll)
         end
     end)
