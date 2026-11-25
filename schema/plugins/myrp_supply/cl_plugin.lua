@@ -294,6 +294,12 @@ hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.CrateFactionOutline", fu
 end)
 
 local function CalibrationFaction()
+    local client = LocalPlayer()
+    if not IsValid(client) or not client:IsSuperAdmin() then
+        print("[MYRP:SUPPLY] UI calibration is restricted to SuperAdmins.")
+        return
+    end
+
     local _, faction = TargetTerminal()
     if faction then return faction end
     local id = LocalFaction()
