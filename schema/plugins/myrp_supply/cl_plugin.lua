@@ -1,6 +1,21 @@
 if not CLIENT then return end
 
 local SUPPLY = MYRP.Supply
+local imgui = SUPPLY.imgui
+
+concommand.Add("myrp_supply_imgui_test", function()
+    if not istable(imgui) then
+        print("[MYRP:SUPPLY] imgui НЕ загружена.")
+        return
+    end
+
+    print("[MYRP:SUPPLY] imgui загружена.")
+    print("Entity3D2D:", isfunction(imgui.Entity3D2D))
+    print("Start3D2D:", isfunction(imgui.Start3D2D))
+    print("End3D2D:", isfunction(imgui.End3D2D))
+    print("IsHovering:", isfunction(imgui.IsHovering))
+    print("IsPressed:", isfunction(imgui.IsPressed))
+end)
 local activeTerminal
 local status = {available = false, remaining = 0, activeCrate = false}
 local lastStatusRequest = 0
