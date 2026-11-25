@@ -4,6 +4,7 @@ local CORPSE_INVENTORY = "myrp_corpse"
 local BOT_INVENTORY = "myrp_testbot"
 local CORPSE_LIFETIME = 300
 local USE_DISTANCE = 112
+local corpseInventoryIDs = {}
 
 local function CorpseLog(level, message)
     MsgC(Color(115, 185, 225), "[MYRP:CORPSES][SERVER][" .. tostring(level) .. "] ",
@@ -22,6 +23,7 @@ local function DeleteTemporaryInventory(inventory)
     if (not inventory or not inventory.GetID) then return end
 
     local id = inventory:GetID()
+    corpseInventoryIDs[id] = nil
 
     if (inventory.storageInfo) then
         ix.storage.Close(inventory)
@@ -120,6 +122,7 @@ local function MoveInventoryToCorpse(client, ragdoll)
         end
 
         ragdoll.ixMYRPCorpseInventory = corpseInventory
+        corpseInventoryIDs[corpseInventory:GetID()] = true
         ragdoll:SetNW2Bool("myrp_corpse", true)
         ragdoll:SetNW2String("myrp_corpse_name", client:Nick())
         ragdoll:SetUseType(SIMPLE_USE)
@@ -265,6 +268,19 @@ hook.Add("PlayerSpawn", "MYRP_CorpseLooting_TestBotInventory", function(client)
             CreateBotInventory(client)
         end
     end)
+end)
+
+hook.Add("InventoryItemAdded", "MYRP_Corpses_LogTransfers", function(oldInventory, newInventory, item)
+    local oldID = oldInventory and oldInventory.GetID and oldInventory:GetID() or -1
+    local newID = newInventory and newInventory.GetID and newInventory:GetID() or -1
+
+    if (corpseInventoryIDs[oldID] or corpseInventoryIDs[newID]) then
+        CorpseLog("INFO", "Item transfer: item=" .. tostring(item and item.uniqueID or "<unknown>")
+            .. ", fromInventory=" .. tostring(oldID)
+            .. ", toInventory=" .. tostring(newID)
+            .. ", fromCorpse=" .. tostring(corpseInventoryIDs[oldID] == true)
+            .. ", toCorpse=" .. tostring(corpseInventoryIDs[newID] == true))
+    end
 end)
 
 hook.Add("PlayerDisconnected", "MYRP_CorpseLooting_TestBotCleanup", function(client)
