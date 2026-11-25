@@ -267,21 +267,52 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
     local activeWeapon = client:GetActiveWeapon()
     local previousWeapon = IsValid(activeWeapon) and activeWeapon:GetClass() or nil
 
-    hands:PickupObject(entity)
-
-    if (!hands:IsHoldingObject()) then
-        SendHoldStatus(client, "failed")
-        return
-    end
-
-    heldWeapons[client] = {
+    -- ix_hands:Deploy() calls DropObject(). Switch to hands BEFORE PickupObject,
+    -- otherwise Deploy immediately drops the object we just picked up.
+    local state = {
         entity = entity,
         hands = hands,
         previousWeapon = previousWeapon
     }
 
+    heldWeapons[client] = state
     client:SelectWeapon("ix_hands")
-    SendHoldStatus(client, "started")
+
+    timer.Simple(0, function()
+        if (heldWeapons[client] != state) then return end
+
+        if (!IsValid(client) or !client:Alive() or !IsValid(entity) or !IsValid(hands)) then
+            heldWeapons[client] = nil
+            SendHoldStatus(client, "failed")
+            return
+        end
+
+        if (client:GetActiveWeapon() != hands or !hands:CanHoldObject(entity)) then
+            heldWeapons[client] = nil
+
+            if (client:HasWeapon(previousWeapon or "") and previousWeapon != "ix_hands") then
+                client:SelectWeapon(previousWeapon)
+            end
+
+            SendHoldStatus(client, "failed")
+            return
+        end
+
+        hands:PickupObject(entity)
+
+        if (!hands:IsHoldingObject()) then
+            heldWeapons[client] = nil
+
+            if (previousWeapon and previousWeapon != "ix_hands" and client:HasWeapon(previousWeapon)) then
+                client:SelectWeapon(previousWeapon)
+            end
+
+            SendHoldStatus(client, "failed")
+            return
+        end
+
+        SendHoldStatus(client, "started")
+    end)
 end)
 
 -- Do not let weapon switching holster ix_hands while an object is held.
