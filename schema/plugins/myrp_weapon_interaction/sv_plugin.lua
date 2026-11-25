@@ -7,6 +7,11 @@ util.AddNetworkString("MYRP_WeaponInteraction_Action")
 
 local pendingPickups = {}
 
+local function InteractionLog(level, message)
+    MsgC(Color(115, 185, 225), "[MYRP:INTERACTION][SERVER][" .. tostring(level) .. "] ",
+        color_white, tostring(message) .. "\n")
+end
+
 local blockedWorldClasses = {
     gmod_tool = true,
     weapon_physgun = true
@@ -144,36 +149,56 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     local entity = net.ReadEntity()
     local action = net.ReadString()
 
+    InteractionLog("INFO", "Action received: player=" .. tostring(IsValid(client) and client:Nick() or "<invalid>")
+        .. ", action=" .. tostring(action)
+        .. ", target=" .. tostring(IsValid(entity) and (entity:GetClass() .. "#" .. entity:EntIndex()) or "<invalid>"))
+
     if (!IsValid(client) or !client:GetCharacter() or !IsValid(entity)) then
+        InteractionLog("WARN", "Action rejected: invalid client, character or entity.")
         return
     end
 
     -- Toolgun and physgun are never interactable world pickups.
     if (blockedWorldClasses[entity:GetClass()]) then return end
 
-    if (client:GetPos():DistToSqr(entity:GetPos()) > 160 * 160) then
+    local distanceSqr = client:GetPos():DistToSqr(entity:GetPos())
+    if (distanceSqr > 160 * 160) then
+        InteractionLog("WARN", "Action rejected: too far; distance=" .. math.sqrt(distanceSqr))
         return
     end
 
     local trace = client:GetEyeTrace()
 
     if (trace.Entity != entity) then
+        InteractionLog("WARN", "Action rejected: server eye trace mismatch; target="
+            .. entity:GetClass() .. "#" .. entity:EntIndex()
+            .. ", trace=" .. tostring(IsValid(trace.Entity) and (trace.Entity:GetClass() .. "#" .. trace.Entity:EntIndex()) or "<world>"))
         return
     end
 
     -- MYRP corpse actions use the same interaction menu as weapons.
     if (IsCorpseEntity(entity)) then
-        if (action != "pockets") then return end
+        InteractionLog("INFO", "Corpse recognized: name="
+            .. entity:GetNW2String("myrp_corpse_name", "<none>")
+            .. ", inventory=" .. tostring(entity.ixMYRPCorpseInventory and entity.ixMYRPCorpseInventory:GetID() or "nil"))
+
+        if (action != "pockets") then
+            InteractionLog("WARN", "Corpse action rejected: action=" .. tostring(action))
+            return
+        end
 
         local inventory = entity.ixMYRPCorpseInventory
 
         if (!inventory or !inventory.GetID) then
+            InteractionLog("ERROR", "Corpse inventory missing for entity=" .. entity:EntIndex())
             Notify(client, "В карманах ничего нет или тело ещё обыскивают.")
             return
         end
 
         if (client.ixOpenStorage == inventory) then return end
 
+        InteractionLog("INFO", "Opening storage: player=" .. client:Nick()
+            .. ", inventory=" .. inventory:GetID())
         ix.storage.Open(client, inventory, {
             entity = entity,
             name = "Обыск тела",
