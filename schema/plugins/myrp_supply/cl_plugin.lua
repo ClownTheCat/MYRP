@@ -162,9 +162,10 @@ local function DrawTerminalPanel(entity, faction)
     local bright = combine and Color(174, 218, 255) or Color(245, 188, 132)
     local bg = combine and Color(5, 14, 24, 245) or Color(19, 13, 10, 245)
     local authorized = LocalFaction() == faction
-    local w, h = 360, 220
-    local buttonY = 158
-    local buttonH = 42
+    -- The CRT display area is nearly square, so use a matching logical canvas.
+    local w, h = 360, 344
+    local buttonY = 222
+    local buttonH = 52
     local now = CurTime()
     local booted = terminalBooted[entity] == true
     local loadingRequest = now < loadingUntil
@@ -215,12 +216,12 @@ local function DrawTerminalPanel(entity, faction)
             local shift = math.floor(now * 1.5) % #logs
             for i = 1, 3 do
                 local index = ((shift + i - 1) % #logs) + 1
-                draw.SimpleText(logs[index], "MYRP_Supply_Log", 13, 70 + (i - 1) * 14,
+                draw.SimpleText(logs[index], "MYRP_Supply_Log", 13, 92 + (i - 1) * 20,
                     Color(accent.r, accent.g, accent.b, i == 3 and 220 or 145))
             end
 
             surface.SetDrawColor(accent.r, accent.g, accent.b, 70)
-            surface.DrawLine(13, 119, w - 13, 119)
+            surface.DrawLine(13, 158, w - 13, 158)
 
             local statusText, statusColor
             if loadingRequest then
@@ -234,7 +235,7 @@ local function DrawTerminalPanel(entity, faction)
                 statusText = "ЗАПРОС НЕДОСТУПЕН  " .. TimeString(status.remaining)
                 statusColor = Color(255, 155, 155)
             end
-            draw.SimpleText(statusText, "MYRP_Supply_Body", 13, 139, statusColor)
+            draw.SimpleText(statusText, "MYRP_Supply_Body", 13, 180, statusColor)
         end
 
         local canActivate = authorized and (not booted or (status.available and not status.activeCrate and not loadingRequest))
@@ -293,7 +294,7 @@ local function DrawBootScreen()
     local localAngle = bootingTerminal:WorldToLocalAngles(angle)
 
     if imgui.Entity3D2D(bootingTerminal, localPosition, localAngle, scale, 300) then
-        local w, h = 360, 220
+        local w, h = 360, 344
         draw.RoundedBox(2, 0, 0, w, h, bg)
         surface.SetDrawColor(accent.r, accent.g, accent.b, 210)
         surface.DrawOutlinedRect(0, 0, w, h, 1)
@@ -353,11 +354,11 @@ local function DrawBootScreen()
                 Color(accent.r, accent.g, accent.b, alpha))
         end
 
-        local barX, barY, barW = 13, 184, w - 26
+        local barX, barY, barW = 13, 294, w - 26
         draw.RoundedBox(2, barX, barY, barW, 5, Color(70, 80, 90, 140))
         draw.RoundedBox(2, barX, barY, barW * progress, 5, accent)
         draw.SimpleText(string.format("INITIALIZING... %d%%", math.floor(progress * 100)),
-            "MYRP_Supply_Log", w / 2, 201, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+            "MYRP_Supply_Log", w / 2, 321, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
         imgui.End3D2D()
     end
 
@@ -862,6 +863,7 @@ local function FinishFourCornerCalibration(state)
         local targetLocalAngle = entity:WorldToLocalAngles(targetAngle)
         local scaleX = width / 360 / 0.075
         local scaleY = height / 220 / 0.075
+        local scaleY = height / 344 / 0.075
         local targetScale = math.Clamp((scaleX + scaleY) * 0.5, 0.5, 1.8)
 
         local currentPosition, currentAngle, currentWorldScale = GetPanelTransform(entity, state.faction)
@@ -870,8 +872,8 @@ local function FinishFourCornerCalibration(state)
         local currentCorners = {
             currentPosition,
             currentPosition + currentForward * (360 * currentWorldScale),
-            currentPosition + currentForward * (360 * currentWorldScale) + currentRight * (220 * currentWorldScale),
-            currentPosition + currentRight * (220 * currentWorldScale)
+            currentPosition + currentForward * (360 * currentWorldScale) + currentRight * (344 * currentWorldScale),
+            currentPosition + currentRight * (344 * currentWorldScale)
         }
         local targetCorners = {topLeft, topRight, bottomRight, bottomLeft}
 
@@ -900,7 +902,7 @@ local function FinishFourCornerCalibration(state)
             math.AngleDifference(targetLocalAngle.p, currentPitch),
             math.AngleDifference(targetLocalAngle.y, currentYaw),
             math.AngleDifference(targetLocalAngle.r, currentRoll)))
-        print(string.format("[MYRP:SUPPLY] Scale сейчас %.2f | цель %.2f | X %.2f | Y %.2f",
+        print(string.format("[MYRP:SUPPLY] Scale сейчас %.2f | цель %.2f | X %.2f | Y %.2f (canvas 360x344)",
             tonumber(cfg.scale) or 1, targetScale, scaleX, scaleY))
         print("[MYRP:SUPPLY] Команды для применения (пока НЕ вводи, сначала пришли этот вывод):")
         print(string.format("myrp_supply_ui_offset %.2f %.2f %.2f", targetLocalPosition.x, targetLocalPosition.y, targetLocalPosition.z))
