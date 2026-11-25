@@ -766,13 +766,71 @@ concommand.Add("myrp_supply_ui_calibrate", function()
     print("[MYRP:SUPPLY] Курсор включён. Наведи его на экран монитора и нажми ЛКМ, чтобы зафиксировать плоскость.")
 end)
 
+local function PrintCalibration(faction)
+    local cfg = Config(faction)
+    print(string.format(
+        "[MYRP:SUPPLY] %s | offset X %.2f Y %.2f Z %.2f | angle P %.1f Y %.1f R %.1f | scale %.2f | surface=%s",
+        faction, cfg.x, cfg.y, cfg.z, cfg.pitch or 0, cfg.yaw or 0, cfg.roll or 0,
+        cfg.scale, tostring(cfg.surface == true)
+    ))
+end
+
 concommand.Add("myrp_supply_ui_offset", function(_, _, args)
     local faction = CalibrationFaction()
-    if not faction then print("[MYRP:SUPPLY] Aim at a terminal or use this as a faction character.") return end
+    if not faction then return end
     local cfg = Config(faction)
-    cfg.x, cfg.y, cfg.z = tonumber(args[1]) or cfg.x, tonumber(args[2]) or cfg.y, tonumber(args[3]) or cfg.z
+    cfg.x = tonumber(args[1]) or cfg.x
+    cfg.y = tonumber(args[2]) or cfg.y
+    cfg.z = tonumber(args[3]) or cfg.z
     SaveConfig(faction)
-    print(string.format("[MYRP:SUPPLY] %s offset: %.1f %.1f %.1f", faction, cfg.x, cfg.y, cfg.z))
+    PrintCalibration(faction)
+end)
+
+concommand.Add("myrp_supply_ui_move", function(_, _, args)
+    local faction = CalibrationFaction()
+    if not faction then return end
+    local axis = string.lower(args[1] or "")
+    local amount = tonumber(args[2])
+    if (axis ~= "x" and axis ~= "y" and axis ~= "z") or not amount then
+        print("[MYRP:SUPPLY] Usage: myrp_supply_ui_move <x|y|z> <distance>")
+        return
+    end
+
+    local cfg = Config(faction)
+    cfg[axis] = math.Clamp((tonumber(cfg[axis]) or 0) + amount, -128, 128)
+    SaveConfig(faction)
+    PrintCalibration(faction)
+end)
+
+concommand.Add("myrp_supply_ui_angle", function(_, _, args)
+    local faction = CalibrationFaction()
+    if not faction then return end
+    local cfg = Config(faction)
+    cfg.pitch = math.Clamp(tonumber(args[1]) or cfg.pitch or 0, -180, 180)
+    cfg.yaw = math.Clamp(tonumber(args[2]) or cfg.yaw or 0, -180, 180)
+    cfg.roll = math.Clamp(tonumber(args[3]) or cfg.roll or 0, -180, 180)
+    cfg.surface = true
+    SaveConfig(faction)
+    PrintCalibration(faction)
+end)
+
+concommand.Add("myrp_supply_ui_rotate", function(_, _, args)
+    local faction = CalibrationFaction()
+    if not faction then return end
+    local axis = string.lower(args[1] or "")
+    local amount = tonumber(args[2])
+    local keys = {pitch = "pitch", p = "pitch", yaw = "yaw", y = "yaw", roll = "roll", r = "roll"}
+    local key = keys[axis]
+    if not key or not amount then
+        print("[MYRP:SUPPLY] Usage: myrp_supply_ui_rotate <pitch|yaw|roll> <degrees>")
+        return
+    end
+
+    local cfg = Config(faction)
+    cfg[key] = math.Clamp((tonumber(cfg[key]) or 0) + amount, -180, 180)
+    cfg.surface = true
+    SaveConfig(faction)
+    PrintCalibration(faction)
 end)
 
 concommand.Add("myrp_supply_ui_scale", function(_, _, args)
@@ -781,31 +839,31 @@ concommand.Add("myrp_supply_ui_scale", function(_, _, args)
     local cfg = Config(faction)
     cfg.scale = math.Clamp(tonumber(args[1]) or cfg.scale, 0.5, 1.8)
     SaveConfig(faction)
-    print("[MYRP:SUPPLY] " .. faction .. " scale: " .. cfg.scale)
+    PrintCalibration(faction)
 end)
 
+-- Backward-compatible alias: the old single rotation value now adjusts local yaw.
 concommand.Add("myrp_supply_ui_rotation", function(_, _, args)
     local faction = CalibrationFaction()
     if not faction then return end
     local cfg = Config(faction)
-    cfg.rotation = tonumber(args[1]) or cfg.rotation
+    cfg.yaw = math.Clamp(tonumber(args[1]) or cfg.yaw or 0, -180, 180)
+    cfg.surface = true
     SaveConfig(faction)
-    print("[MYRP:SUPPLY] Rotation profile saved: " .. cfg.rotation .. " (visual rotation is reserved for 3D2D calibration).")
+    PrintCalibration(faction)
 end)
 
 concommand.Add("myrp_supply_ui_reset", function()
     local faction = CalibrationFaction()
     if not faction then return end
-    configs[faction] = {x = 0, y = 0, z = 0, scale = 1, rotation = 0}
+    configs[faction] = {x = 0, y = 0, z = 0, scale = 1, rotation = 0, surface = false, pitch = 0, yaw = 0, roll = 0}
     SaveConfig(faction)
-    print("[MYRP:SUPPLY] " .. faction .. " calibration reset.")
+    PrintCalibration(faction)
 end)
 
 concommand.Add("myrp_supply_ui_status", function()
     local faction = CalibrationFaction()
     if not faction then return end
-    local cfg = Config(faction)
-    print(string.format("[MYRP:SUPPLY] %s | offset %.1f %.1f %.1f | scale %.2f | rotation %.1f",
-        faction, cfg.x, cfg.y, cfg.z, cfg.scale, cfg.rotation))
+    PrintCalibration(faction)
 end)
 
