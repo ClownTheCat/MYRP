@@ -74,67 +74,137 @@ local function GetWeaponTarget()
     return entity, itemName, hasItem
 end
 
-local function DrawConnector(entity, x, y, width, height, accent)
+local menuProgress = 0
+local menuDisplayName = "Оружие"
+local menuRowProgress = {0, 0}
+
+surface.CreateFont("MYRP_WeaponMenu_Header", {
+    font = "Roboto",
+    size = 13,
+    weight = 800,
+    antialias = true,
+    extended = true
+})
+
+surface.CreateFont("MYRP_WeaponMenu_Title", {
+    font = "Roboto",
+    size = 21,
+    weight = 700,
+    antialias = true,
+    extended = true
+})
+
+surface.CreateFont("MYRP_WeaponMenu_Body", {
+    font = "Roboto",
+    size = 16,
+    weight = 500,
+    antialias = true,
+    extended = true
+})
+
+surface.CreateFont("MYRP_WeaponMenu_Hint", {
+    font = "Roboto",
+    size = 13,
+    weight = 500,
+    antialias = true,
+    extended = true
+})
+
+local function FadeColor(color, alpha)
+    return Color(color.r, color.g, color.b, math.Clamp(alpha, 0, 255))
+end
+
+local function DrawConnector(entity, x, y, width, height, accent, alpha)
     if (!IsValid(entity)) then return end
 
     local anchor = entity:WorldSpaceCenter():ToScreen()
-
     if (!anchor.visible) then return end
 
-    -- Find the nearest edge of the menu.
     local centerX = x + width * 0.5
     local centerY = y + height * 0.5
-
     local dx = anchor.x - centerX
     local dy = anchor.y - centerY
-
-    local attachX
-    local attachY
+    local attachX, attachY
 
     if (math.abs(dx) / width > math.abs(dy) / height) then
         attachX = dx < 0 and x or x + width
-        attachY = math.Clamp(anchor.y, y + 12, y + height - 12)
+        attachY = math.Clamp(anchor.y, y + 14, y + height - 14)
     else
         attachY = dy < 0 and y or y + height
-        attachX = math.Clamp(anchor.x, x + 12, x + width - 12)
+        attachX = math.Clamp(anchor.x, x + 14, x + width - 14)
     end
 
-    -- Subtle shadow under the connecting line.
-    surface.SetDrawColor(0, 0, 0, 150)
-    surface.DrawLine(anchor.x, anchor.y + 1, attachX, attachY + 1)
+    surface.SetDrawColor(0, 0, 0, math.floor(alpha * 0.48))
+    surface.DrawLine(anchor.x, anchor.y + 2, attachX, attachY + 2)
 
-    -- Main faction-colored line.
-    surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
+    surface.SetDrawColor(accent.r, accent.g, accent.b, math.floor(alpha * 0.78))
     surface.DrawLine(anchor.x, anchor.y, attachX, attachY)
 
-    -- Small marker on the weapon.
-    surface.DrawCircle(anchor.x, anchor.y, 4, accent)
-    surface.DrawCircle(anchor.x, anchor.y, 2, color_white)
+    surface.DrawCircle(anchor.x, anchor.y, 5, FadeColor(accent, alpha))
+    surface.DrawCircle(anchor.x, anchor.y, 2, Color(235, 244, 252, alpha))
+end
+
+local function DrawWeaponMenuPanel(x, y, width, height, theme, accent, alpha)
+    local pulse = (math.sin(CurTime() * 2.1) + 1) * 0.5
+    local glow = theme.glow or accent
+    local panel = theme.panel or Color(8, 15, 22, 220)
+    local inner = theme.panelInner or Color(15, 25, 36, 220)
+
+    draw.RoundedBox(11, x - 4, y - 4, width + 8, height + 8,
+        Color(glow.r, glow.g, glow.b, math.floor(alpha * (0.07 + pulse * 0.035))))
+    draw.RoundedBox(9, x, y, width, height,
+        Color(panel.r, panel.g, panel.b, math.floor(alpha * 0.94)))
+    draw.RoundedBox(8, x + 1, y + 1, width - 2, height - 2,
+        Color(inner.r, inner.g, inner.b, math.floor(alpha * 0.91)))
+
+    surface.SetDrawColor(accent.r, accent.g, accent.b, math.floor(alpha * 0.62))
+    surface.DrawOutlinedRect(x, y, width, height, 1)
+
+    draw.RoundedBox(3, x + 2, y + 2, width - 4, 3,
+        Color(accent.r, accent.g, accent.b, math.floor(alpha * 0.78)))
+
+    -- Small technical corner marks give the panel the MYRP terminal look.
+    surface.SetDrawColor(accent.r, accent.g, accent.b, math.floor(alpha * 0.65))
+    surface.DrawLine(x + 12, y + 12, x + 28, y + 12)
+    surface.DrawLine(x + 12, y + 12, x + 12, y + 25)
+    surface.DrawLine(x + width - 12, y + height - 12, x + width - 28, y + height - 12)
+    surface.DrawLine(x + width - 12, y + height - 12, x + width - 12, y + height - 25)
 end
 
 hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
     local entity, itemName, hasItem = GetWeaponTarget()
+    local targetVisible = IsValid(entity)
 
-    if (!IsValid(entity)) then
-        selectedEntity = nil
-        selectedAction = 1
+    if (targetVisible) then
+        if (selectedEntity != entity) then
+            selectedEntity = entity
+            selectedAction = 1
+            menuRowProgress[1] = 0
+            menuRowProgress[2] = 0
+        end
+
+        menuDisplayName = itemName or "Оружие"
+    end
+
+    local frameTime = math.min(FrameTime(), 0.05)
+    local targetProgress = targetVisible and 1 or 0
+    menuProgress = Lerp(1 - math.exp(-frameTime * 11), menuProgress, targetProgress)
+
+    if (menuProgress <= 0.005) then
+        if (!targetVisible) then
+            selectedEntity = nil
+            selectedAction = 1
+        end
         return
     end
 
-    -- Reset selection when aiming at a different weapon.
-    if (selectedEntity != entity) then
-        selectedEntity = entity
-        selectedAction = 1
-    end
-
     local client = LocalPlayer()
+    local width, height = 356, 202
+    local x = math.min(ScrW() * 0.5 + 38, ScrW() - width - 20)
+    local y = math.min(ScrH() * 0.5 + 34, ScrH() - height - 20)
 
-    local width, height = 340, 184
-    local x = math.min(ScrW() * 0.5 + 34, ScrW() - width - 18)
-    local y = math.min(ScrH() * 0.5 + 34, ScrH() - height - 18)
-
-    x = math.max(18, x)
-    y = math.max(18, y)
+    x = math.max(20, x)
+    y = math.max(20, y)
 
     local theme
     local accent = Color(110, 175, 255)
@@ -146,92 +216,82 @@ hook.Add("HUDPaint", "MYRP_WeaponInteraction_TargetUI", function()
 
         if (MYRP.UI.GetAccent) then
             local result = MYRP.UI.GetAccent(client)
-
-            if (IsColor(result)) then
-                accent = result
-            end
+            if (IsColor(result)) then accent = result end
         end
     end
 
-    -- Draw the tether before the panel.
-    DrawConnector(entity, x, y, width, height, accent)
+    local slide = (1 - menuProgress) * 17
+    local drawX, drawY = x + slide, y + slide * 0.35
+    local alpha = math.floor(255 * menuProgress)
 
-    if (MYRP and MYRP.UI and MYRP.UI.DrawGlowPanel) then
-        MYRP.UI.DrawGlowPanel(x, y, width, height, theme, 245, 8)
-    else
-        draw.RoundedBox(8, x, y, width, height, Color(12, 17, 27, 240))
+    if (targetVisible) then
+        DrawConnector(entity, drawX, drawY, width, height, accent, alpha)
     end
 
-    draw.SimpleText(
-        "ВЗАИМОДЕЙСТВИЕ",
-        "DermaDefaultBold",
-        x + 16, y + 13,
-        accent,
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP
-    )
+    DrawWeaponMenuPanel(drawX, drawY, width, height, theme, accent, alpha)
 
-    draw.SimpleText(
-        itemName or "Оружие",
-        "DermaDefaultBold",
-        x + 16, y + 35,
-        color_white,
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP
-    )
+    draw.SimpleText("MYRP  /  ВЗАИМОДЕЙСТВИЕ", "MYRP_WeaponMenu_Header",
+        drawX + 19, drawY + 18, FadeColor(accent, alpha),
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+
+    draw.SimpleText(menuDisplayName, "MYRP_WeaponMenu_Title",
+        drawX + 19, drawY + 47, Color(235, 242, 249, alpha),
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+
+    draw.SimpleText("ДЕЙСТВИЕ", "MYRP_WeaponMenu_Header",
+        drawX + 20, drawY + 78, Color(125, 151, 174, alpha),
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
     for i = 1, #actionNames do
-        local rowY = y + 59 + (i - 1) * 23
-        local enabled = hasItem
         local selected = selectedAction == i
+        local enabled = targetVisible and hasItem
+        local targetRowProgress = selected and 1 or 0
+        menuRowProgress[i] = Lerp(1 - math.exp(-frameTime * 14), menuRowProgress[i], targetRowProgress)
 
-        if (selected) then
-            local backgroundColor = enabled
-                and Color(accent.r, accent.g, accent.b, 45)
-                or Color(130, 130, 130, 35)
+        local rowY = drawY + 91 + (i - 1) * 27
+        local rowAmount = menuRowProgress[i]
+        local rowAlpha = alpha * rowAmount
 
-            draw.RoundedBox(4, x + 10, rowY, width - 20, 21, backgroundColor)
-
-            draw.RoundedBox(
-                2, x + 10, rowY + 2, 3, 17,
-                enabled and accent or Color(130, 130, 130)
-            )
+        if (rowAmount > 0.01) then
+            draw.RoundedBox(5, drawX + 12, rowY, width - 24, 24,
+                Color(accent.r, accent.g, accent.b, math.floor(rowAlpha * 0.19)))
+            draw.RoundedBox(2, drawX + 12, rowY + 4, 3, 16,
+                Color(accent.r, accent.g, accent.b, math.floor(rowAlpha * 0.95)))
+            draw.RoundedBox(2, drawX + 17, rowY + 4, 1, 16,
+                Color(accent.r, accent.g, accent.b, math.floor(rowAlpha * 0.25)))
         end
 
         local textColor
-
         if (!enabled) then
-            textColor = Color(115, 115, 115)
+            textColor = Color(115, 128, 141, alpha)
         elseif (selected) then
-            textColor = color_white
+            textColor = Color(242, 247, 252, alpha)
         else
-            textColor = Color(190, 195, 205)
+            textColor = Color(180, 196, 210, alpha)
         end
 
-        local prefix = selected and "›  " or "   "
+        local prefix = selected and "›" or "·"
+        draw.SimpleText(prefix .. "  " .. actionNames[i], "MYRP_WeaponMenu_Body",
+            drawX + 25, rowY + 12, textColor,
+            TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 
-        draw.SimpleText(
-            prefix .. actionNames[i],
-            "DermaDefault",
-            x + 19, rowY + 3,
-            textColor,
-            TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP
-        )
+        if (selected and !enabled) then
+            draw.SimpleText("НЕДОСТУПНО", "MYRP_WeaponMenu_Header",
+                drawX + width - 22, rowY + 12, Color(140, 145, 152, alpha),
+                TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER)
+        end
     end
 
-    draw.SimpleText(
-        "Зажми E — физически поднять оружие",
-        "DermaDefault",
-        x + 16, y + 132,
-        Color(210, 215, 225),
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP
-    )
+    surface.SetDrawColor(accent.r, accent.g, accent.b, math.floor(alpha * 0.24))
+    surface.DrawLine(drawX + 18, drawY + 151, drawX + width - 18, drawY + 151)
 
-    draw.SimpleText(
-        "Колесо — выбор  ·  Короткое E — действие",
-        "DermaDefault",
-        x + 16, y + 151,
-        Color(150, 155, 165),
-        TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP
-    )
+    draw.SimpleText("УДЕРЖИВАЙ E  /  ФИЗИЧЕСКИ ПОДНЯТЬ", "MYRP_WeaponMenu_Hint",
+        drawX + 19, drawY + 166, Color(205, 217, 228, alpha),
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+
+    draw.SimpleText("КОЛЕСО — ВЫБОР     ·     E — ПОДТВЕРДИТЬ", "MYRP_WeaponMenu_Hint",
+        drawX + 19, drawY + 186, Color(132, 153, 172, alpha),
+        TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
 end)
 
 -- MYRP_PhysicalHold_Client
