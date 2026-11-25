@@ -8,7 +8,12 @@ local loadingUntil = 0
 local lastTerminalUse = false
 local lastCrateUse = false
 local openingSound
-local clicker = false
+local terminalBooted = setmetatable({}, {__mode = "k"})
+local bootingTerminal
+local bootingFaction
+local bootStartedAt = 0
+local bootDuration = 6
+local terminalPanelState
 local configs = {}
 local openingProgress = 0
 local openingTargetProgress = 0
@@ -69,139 +74,266 @@ local function TargetTerminal()
     return entity, faction
 end
 
-local function SetClicker(enabled)
-    if clicker ~= enabled then
-        clicker = enabled
-        gui.EnableScreenClicker(enabled)
-    end
-end
-
 local function TimeString(seconds)
     seconds = math.max(0, math.ceil(seconds or 0))
     return string.format("%02d:%02d", math.floor(seconds / 60), seconds % 60)
 end
 
-local function DrawTerminal(entity, faction)
+local function GetPanelTransform(entity, faction)
     local cfg = Config(faction)
-    local anchor = entity:LocalToWorld(entity:OBBCenter() + Vector(cfg.x, cfg.y, cfg.z)):ToScreen()
-    if not anchor.visible then return end
+    local client = LocalPlayer()
+    local base = entity:LocalToWorld(entity:OBBCenter() + Vector(cfg.x, cfg.y, cfg.z))
+    local towardPlayer = (client:EyePos() - base):GetNormalized()
+    local position = base + towardPlayer * 5
+    local angle = towardPlayer:Angle()
+    angle:RotateAroundAxis(angle:Forward(), 90)
+    angle:RotateAroundAxis(angle:Right(), 90)
+    return position, angle, math.Clamp(tonumber(cfg.scale) or 1, 0.5, 1.8) * 0.075
+end
 
-    local scale = math.Clamp(tonumber(cfg.scale) or 1, 0.5, 1.8)
-    local w, h = 350 * scale, 238 * scale
-    local x = math.Clamp(anchor.x - w / 2, 10, ScrW() - w - 10)
-    local y = math.Clamp(anchor.y - h / 2, 10, ScrH() - h - 10)
+local function DrawTerminalPanel(entity, faction)
+    local client = LocalPlayer()
+    local position, angle, scale = GetPanelTransform(entity, faction)
     local combine = faction == "combine"
     local accent = combine and Color(105, 180, 245) or Color(218, 145, 91)
     local bright = combine and Color(174, 218, 255) or Color(245, 188, 132)
     local bg = combine and Color(5, 14, 24, 245) or Color(19, 13, 10, 245)
     local authorized = LocalFaction() == faction
+    local w, h = 360, 220
+    local buttonY = 158
+    local buttonH = 42
+    local now = CurTime()
+    local booted = terminalBooted[entity] == true
+    local loadingRequest = now < loadingUntil
 
-    draw.RoundedBox(3, x - 4, y - 4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, 24))
-    draw.RoundedBox(2, x, y, w, h, bg)
-    surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
-    surface.DrawOutlinedRect(x, y, w, h, 1)
-    surface.DrawRect(x + 1, y + 1, w - 2, 3)
+    cam.Start3D2D(position, angle, scale)
+        draw.RoundedBox(3, -4, -4, w + 8, h + 8, Color(accent.r, accent.g, accent.b, 24))
+        draw.RoundedBox(2, 0, 0, w, h, bg)
+        surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
+        surface.DrawOutlinedRect(0, 0, w, h, 1)
+        surface.SetDrawColor(accent.r, accent.g, accent.b, 190)
+        surface.DrawRect(1, 1, w - 2, 3)
 
-    draw.SimpleText(combine and "CITADEL SUPPLY // NODE-07" or "RESISTANCE NET // NODE-03",
-        "MYRP_Supply_Title", x + 13, y + 15, bright)
-    draw.SimpleText("MYRP FIELD SYSTEM  |  ARCH-LIKE TTY", "MYRP_Supply_Log",
-        x + 13, y + 42, Color(145, 173, 192))
+        draw.SimpleText(combine and "CITADEL SUPPLY // NODE-07" or "RESISTANCE NET // NODE-03",
+            "MYRP_Supply_Title", 13, 15, bright)
+        draw.SimpleText("MYRP FIELD SYSTEM  |  ARCH-LIKE TTY", "MYRP_Supply_Log",
+            13, 42, Color(145, 173, 192))
+
+        if not authorized then
+            draw.SimpleText("ACCESS DENIED // WRONG FACTION", "MYRP_Supply_Body",
+                13, 91, Color(255, 125, 125))
+            draw.SimpleText("IDENTITY CHECK FAILED", "MYRP_Supply_Log",
+                13, 115, Color(190, 105, 105))
+        elseif not booted then
+            draw.SimpleText("SYSTEM STATE: POWERED DOWN", "MYRP_Supply_Body",
+                13, 91, Color(220, 185, 125))
+            draw.SimpleText("Нажмите E на кнопке ниже, чтобы запустить ОС", "MYRP_Supply_Log",
+                13, 119, Color(175, 185, 195))
+        else
+            local logs = combine and {
+                "[  OK  ] enclave uplink established",
+                "[  OK  ] terminal certificate verified",
+                "[  OK  ] encrypted channel ready",
+                "[ INFO ] supply-daemon: listening",
+                "[  OK  ] cargo manifest mounted",
+                "[ INFO ] radio: scanning traffic"
+            } or {
+                "[  OK  ] resistance mesh connected",
+                "[  OK  ] node identity verified",
+                "[  OK  ] encrypted relay ready",
+                "[ INFO ] supplyd: awaiting requisition",
+                "[  OK  ] local manifest loaded",
+                "[ INFO ] radio: monitoring traffic"
+            }
+            local shift = math.floor(now * 1.5) % #logs
+            for i = 1, 3 do
+                local index = ((shift + i - 1) % #logs) + 1
+                draw.SimpleText(logs[index], "MYRP_Supply_Log", 13, 70 + (i - 1) * 14,
+                    Color(accent.r, accent.g, accent.b, i == 3 and 220 or 145))
+            end
+
+            surface.SetDrawColor(accent.r, accent.g, accent.b, 70)
+            surface.DrawLine(13, 119, w - 13, 119)
+
+            local statusText, statusColor
+            if loadingRequest then
+                statusText = "ОТПРАВЛЯЮ ЗАПРОС" .. string.rep(".", math.floor(now * 3) % 4)
+                statusColor = Color(240, 205, 125)
+            elseif status.activeCrate then
+                statusText, statusColor = "ЗАПРОС НЕДОСТУПЕН // ГРУЗ В ПОЛЕ", Color(255, 150, 150)
+            elseif status.available then
+                statusText, statusColor = "ЗАПРОС ГРУЗА ДОСТУПЕН", Color(165, 245, 175)
+            else
+                statusText = "ЗАПРОС НЕДОСТУПЕН  " .. TimeString(status.remaining)
+                statusColor = Color(255, 155, 155)
+            end
+            draw.SimpleText(statusText, "MYRP_Supply_Body", 13, 139, statusColor)
+        end
+
+        local canActivate = authorized and (not booted or (status.available and not status.activeCrate and not loadingRequest))
+        local buttonText
+        if not authorized then
+            buttonText = "ДОСТУП ЗАПРЕЩЁН"
+        elseif not booted then
+            buttonText = "E   ЗАПУСТИТЬ ОС"
+        elseif loadingRequest then
+            buttonText = "ЗАПРОС ОТПРАВЛЯЕТСЯ..."
+        else
+            buttonText = "E   ЗАПРОСИТЬ ГРУЗ"
+        end
+
+        local selected = terminalPanelState and terminalPanelState.entity == entity
+            and terminalPanelState.hovered == true
+        local buttonColor = selected and bright or accent
+        draw.RoundedBox(2, 13, buttonY, w - 26, buttonH,
+            Color(buttonColor.r, buttonColor.g, buttonColor.b, canActivate and (selected and 75 or 35) or 15))
+        surface.SetDrawColor(buttonColor.r, buttonColor.g, buttonColor.b, canActivate and 210 or 65)
+        surface.DrawOutlinedRect(13, buttonY, w - 26, buttonH, 1)
+        draw.SimpleText(buttonText, "MYRP_Supply_Body", w / 2, buttonY + buttonH / 2,
+            canActivate and bright or Color(125, 135, 145), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+
+        draw.SimpleText("AIM AT OPTION  //  PRESS E", "MYRP_Supply_Log",
+            13, h - 10, Color(135, 155, 170))
+    cam.End3D2D()
+
+    -- Intersect the player's aim ray with the floating panel to select its single action.
+    local hit = util.IntersectRayWithPlane(client:EyePos(), client:GetAimVector(), position, angle:Forward())
+    local hovered = false
+    if hit then
+        local delta = hit - position
+        local localX = delta:Dot(angle:Right()) / scale
+        local localY = -delta:Dot(angle:Up()) / scale
+        hovered = localX >= 13 and localX <= w - 13 and localY >= buttonY and localY <= buttonY + buttonH
+    end
+
+    terminalPanelState = {entity = entity, faction = faction, hovered = hovered, canActivate = canActivate}
+    return hovered, canActivate
+end
+
+local function DrawBootScreen()
+    if not IsValid(bootingTerminal) then
+        bootingTerminal = nil
+        return
+    end
+
+    local elapsed = CurTime() - bootStartedAt
+    local progress = math.Clamp(elapsed / bootDuration, 0, 1)
+    local combine = bootingFaction == "combine"
+    local accent = combine and Color(105, 180, 245) or Color(225, 145, 85)
+    local bg = combine and Color(3, 9, 17) or Color(12, 8, 6)
+    draw.RoundedBox(0, 0, 0, ScrW(), ScrH(), bg)
+
+    local logo = combine and "CMB" or "λ"
+    draw.SimpleText(logo, "MYRP_Supply_Title", ScrW() / 2, ScrH() * 0.23, accent,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    draw.SimpleText(combine and "CIVIL PROTECTION // SUPPLY NETWORK" or "RESISTANCE // FIELD NETWORK",
+        "MYRP_Supply_Body", ScrW() / 2, ScrH() * 0.23 + 38, color_white,
+        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+    draw.SimpleText("BOOTING MYRP FIELD OPERATING SYSTEM", "MYRP_Supply_Body",
+        ScrW() / 2, ScrH() * 0.34, accent, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
     local logs = combine and {
-        "[  OK  ] enclave uplink established",
-        "[  OK  ] terminal certificate verified",
-        "[  OK  ] encrypted channel ready",
-        "[ INFO ] supply-daemon: listening",
-        "[  OK  ] cargo manifest mounted",
-        "[ INFO ] radio: scanning traffic"
+        "[    0.000] CITADEL BIOS v4.2 initializing",
+        "[    0.041] CPU: checking secure execution environment",
+        "[    0.086] memory: 65536 MB detected",
+        "[    0.133] mounting /dev/citadel/root",
+        "[    0.190] [ OK ] kernel image signature verified",
+        "[    0.244] loading combine network drivers",
+        "[    0.301] [ OK ] encrypted uplink established",
+        "[    0.358] starting civil protection subsystem",
+        "[    0.417] loading requisition database",
+        "[    0.476] [ OK ] cargo manifest mounted",
+        "[    0.535] starting supply-daemon.service",
+        "[    0.594] synchronizing local node clock",
+        "[    0.653] [ OK ] radio interception module ready",
+        "[    0.712] checking authorization token",
+        "[    0.771] [ OK ] identity accepted",
+        "[    0.830] starting terminal interface",
+        "[    0.889] [ OK ] all systems operational"
     } or {
-        "[  OK  ] resistance mesh connected",
-        "[  OK  ] node identity verified",
-        "[  OK  ] encrypted relay ready",
-        "[ INFO ] supplyd: awaiting requisition",
-        "[  OK  ] local manifest loaded",
-        "[ INFO ] radio: monitoring traffic"
+        "[    0.000] RESISTANCE BIOS initializing",
+        "[    0.041] searching for nearby mesh nodes",
+        "[    0.086] memory: 8192 MB detected",
+        "[    0.133] mounting /dev/resistance/root",
+        "[    0.190] [ OK ] kernel image signature verified",
+        "[    0.244] loading radio relay drivers",
+        "[    0.301] [ OK ] encrypted mesh established",
+        "[    0.358] starting field communications",
+        "[    0.417] loading requisition database",
+        "[    0.476] [ OK ] supply manifest mounted",
+        "[    0.535] starting supplyd.service",
+        "[    0.594] synchronizing relay clock",
+        "[    0.653] [ OK ] resistance channels online",
+        "[    0.712] checking operator credentials",
+        "[    0.771] [ OK ] identity accepted",
+        "[    0.830] starting terminal interface",
+        "[    0.889] [ OK ] all systems operational"
     }
 
-    local shift = math.floor(CurTime() * 1.5) % #logs
-    for i = 1, 4 do
-        local index = ((shift + i - 1) % #logs) + 1
-        draw.SimpleText(logs[index], "MYRP_Supply_Log", x + 13, y + 65 + (i - 1) * 14,
-            Color(accent.r, accent.g, accent.b, i == 4 and 220 or 145))
+    local visibleLines = math.min(#logs, math.floor(elapsed * 5) + 1)
+    local first = math.max(1, visibleLines - 9)
+    local startY = ScrH() * 0.48
+    for i = first, visibleLines do
+        local lineIndex = i
+        local alpha = i == visibleLines and 255 or 175
+        draw.SimpleText(logs[lineIndex], "MYRP_Supply_Log", ScrW() / 2, startY + (i - first) * 17,
+            Color(accent.r, accent.g, accent.b, alpha), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
     end
 
-    surface.SetDrawColor(accent.r, accent.g, accent.b, 70)
-    surface.DrawLine(x + 13, y + 126, x + w - 13, y + 126)
+    local barW = math.min(520, ScrW() * 0.55)
+    local barX = (ScrW() - barW) / 2
+    local barY = ScrH() * 0.82
+    draw.RoundedBox(2, barX, barY, barW, 5, Color(70, 80, 90, 140))
+    draw.RoundedBox(2, barX, barY, barW * progress, 5, accent)
+    draw.SimpleText(string.format("INITIALIZING... %d%%", math.floor(progress * 100)),
+        "MYRP_Supply_Log", ScrW() / 2, barY + 20, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
 
-    local statusText, statusColor
-    if not authorized then
-        statusText, statusColor = "ACCESS DENIED // WRONG FACTION", Color(255, 125, 125)
-    elseif CurTime() < loadingUntil then
-        statusText, statusColor = "ОТПРАВЛЯЮ ЗАПРОС" .. string.rep(".", math.floor(CurTime() * 3) % 4), Color(240, 205, 125)
-    elseif status.activeCrate then
-        statusText, statusColor = "ЗАПРОС НЕДОСТУПЕН // ГРУЗ В ПОЛЕ", Color(255, 150, 150)
-    elseif status.available then
-        statusText, statusColor = "ЗАПРОС ГРУЗА ДОСТУПЕН", Color(165, 245, 175)
-    else
-        statusText, statusColor = "ЗАПРОС ГРУЗА НЕДОСТУПЕН  " .. TimeString(status.remaining), Color(255, 155, 155)
+    if progress >= 1 then
+        terminalBooted[bootingTerminal] = true
+        bootingTerminal = nil
+        bootingFaction = nil
+        lastStatusRequest = 0
+        surface.PlaySound("buttons/button14.wav")
     end
-    draw.SimpleText(statusText, "MYRP_Supply_Body", x + 13, y + 148, statusColor)
-
-    if CurTime() < loadingUntil then
-        local loadX, loadY, loadW = x + 13, y + 158, w - 26
-        draw.RoundedBox(1, loadX, loadY, loadW, 3, Color(50, 55, 60, 180))
-        local loadProgress = math.Clamp(1 - (loadingUntil - CurTime()) / 1.7, 0, 1)
-        draw.RoundedBox(1, loadX, loadY, loadW * loadProgress, 3, accent)
-    end
-
-    local bx, by, bw, bh = x + 13, y + 169, w - 26, 34
-    local mx, my = gui.MousePos()
-    local hovered = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
-    local canRequest = authorized and status.available and not status.activeCrate and CurTime() >= loadingUntil
-    local button = canRequest and accent or Color(75, 85, 95)
-    if hovered and canRequest then button = bright end
-
-    draw.RoundedBox(2, bx, by, bw, bh, Color(button.r, button.g, button.b, canRequest and 42 or 18))
-    surface.SetDrawColor(button.r, button.g, button.b, canRequest and 210 or 75)
-    surface.DrawOutlinedRect(bx, by, bw, bh, 1)
-    draw.SimpleText(canRequest and "[ E ]  ЗАПРОСИТЬ ГРУЗ" or "[ E ]  ЗАПРОС НЕДОСТУПЕН",
-        "MYRP_Supply_Body", bx + bw / 2, by + bh / 2, canRequest and bright or Color(130, 140, 150),
-        TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
-
-    draw.SimpleText("LINK: " .. (authorized and "SECURE" or "REJECTED"),
-        "MYRP_Supply_Log", x + 13, y + h - 13,
-        authorized and Color(130, 205, 155) or Color(235, 110, 110))
-
-    return hovered, canRequest
 end
 
 hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
+    if IsValid(bootingTerminal) then
+        DrawBootScreen()
+        return
+    end
+
     local entity, faction = TargetTerminal()
     if not IsValid(entity) then
         activeTerminal = nil
-        SetClicker(false)
+        terminalPanelState = nil
         lastTerminalUse = input.IsKeyDown(KEY_E)
         return
     end
 
-    SetClicker(true)
     if activeTerminal ~= entity then
         activeTerminal = entity
         lastStatusRequest = 0
         status = {available = false, remaining = 0, activeCrate = false}
     end
 
-    if CurTime() - lastStatusRequest > 1 then
+    if terminalBooted[entity] and CurTime() - lastStatusRequest > 1 then
         lastStatusRequest = CurTime()
         net.Start("MYRP_Supply_StatusRequest")
             net.WriteEntity(entity)
         net.SendToServer()
     end
 
-    local hovered, canRequest = DrawTerminal(entity, faction)
+    DrawTerminalPanel(entity, faction)
     local useDown = input.IsKeyDown(KEY_E)
-    if useDown and not lastTerminalUse and hovered then
-        if canRequest then
+    local panel = terminalPanelState
+    if useDown and not lastTerminalUse and panel and panel.entity == entity and panel.hovered and panel.canActivate then
+        if not terminalBooted[entity] then
+            bootingTerminal = entity
+            bootingFaction = faction
+            bootStartedAt = CurTime()
+            surface.PlaySound("music/hl2_song15.mp3")
+        else
             loadingUntil = CurTime() + 1.7
             status.available = false
             status.remaining = SUPPLY.RequestCooldown
@@ -209,9 +341,9 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
             net.Start("MYRP_Supply_Request")
                 net.WriteEntity(entity)
             net.SendToServer()
-        elseif MYRP.UI and MYRP.UI.PlaySound then
-            MYRP.UI.PlaySound("denied")
         end
+    elseif useDown and not lastTerminalUse and panel and panel.entity == entity and not panel.hovered then
+        if MYRP.UI and MYRP.UI.PlaySound then MYRP.UI.PlaySound("denied") end
     end
     lastTerminalUse = useDown
 end)
@@ -380,6 +512,3 @@ concommand.Add("myrp_supply_ui_status", function()
         faction, cfg.x, cfg.y, cfg.z, cfg.scale, cfg.rotation))
 end)
 
-hook.Add("ShutDown", "MYRP.Supply.DisableClicker", function()
-    SetClicker(false)
-end)
