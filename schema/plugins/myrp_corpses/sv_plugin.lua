@@ -101,6 +101,8 @@ local function MoveInventoryToCorpse(client, ragdoll)
         end
 
         ragdoll.ixMYRPCorpseInventory = corpseInventory
+        ragdoll:SetNW2Bool("myrp_corpse", true)
+        ragdoll:SetNW2String("myrp_corpse_name", client:Nick())
         ragdoll:SetUseType(SIMPLE_USE)
 
         local items = source:GetItems(true)
@@ -223,59 +225,6 @@ hook.Add("PlayerSpawn", "MYRP_CorpseLooting_TestBotInventory", function(client)
             CreateBotInventory(client)
         end
     end)
-end)
-
-local function TryOpenCorpseInventory(client, entity)
-    if (not IsValid(client) or not client:Alive() or not client:GetCharacter()) then
-        return false
-    end
-
-    if (not IsValid(entity) or entity:GetClass() != "prop_ragdoll") then
-        return false
-    end
-
-    local inventory = entity.ixMYRPCorpseInventory
-
-    if (not inventory or not inventory.GetID) then
-        return false
-    end
-
-    if (client:GetPos():DistToSqr(entity:GetPos()) > USE_DISTANCE * USE_DISTANCE) then
-        return false
-    end
-
-    if (client.ixOpenStorage == inventory or (client.ixMYRPCorpseUseCooldown or 0) > CurTime()) then
-        return true
-    end
-
-    client.ixMYRPCorpseUseCooldown = CurTime() + 0.5
-
-    ix.storage.Open(client, inventory, {
-        entity = entity,
-        name = "Обыск тела",
-        bMultipleUsers = true
-    })
-
-    return true
-end
-
-hook.Add("PlayerUse", "MYRP_CorpseLooting_Use", function(client, entity)
-    if (TryOpenCorpseInventory(client, entity)) then
-        return false
-    end
-end)
-
--- Some ragdolls do not dispatch PlayerUse reliably; handle the E key directly too.
-hook.Add("KeyPress", "MYRP_CorpseLooting_KeyPress", function(client, key)
-    if (key != IN_USE or not IsValid(client) or not client:Alive()) then
-        return
-    end
-
-    local trace = client:GetEyeTrace()
-
-    if (IsValid(trace.Entity) and TryOpenCorpseInventory(client, trace.Entity)) then
-        return true
-    end
 end)
 
 hook.Add("PlayerDisconnected", "MYRP_CorpseLooting_TestBotCleanup", function(client)
