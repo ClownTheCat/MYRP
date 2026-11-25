@@ -23,6 +23,42 @@ local function GetHands(client)
     end
 end
 
+local function IsWeaponEntity(entity)
+    if (!IsValid(entity)) then return false end
+
+    local class = entity:GetClass()
+    return (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
+end
+
+local function IsPhysicalWorldObject(entity)
+    if (!IsValid(entity) or entity:IsPlayer() or entity:IsNPC()) then return false end
+    if (entity.IsNextBot and entity:IsNextBot()) then return false end
+    if (entity.IsVehicle and entity:IsVehicle()) then return false end
+
+    local class = entity:GetClass()
+    if (class == "ix_item" or IsWeaponEntity(entity)) then return false end
+    if (string.StartWith(class, "prop_vehicle") or string.StartWith(class, "vehicle_")) then return false end
+    if (string.StartWith(class, "gmod_") or string.StartWith(class, "func_") or string.StartWith(class, "trigger_")) then return false end
+
+    local model = entity:GetModel()
+    local physics = entity:GetPhysicsObject()
+
+    return isstring(model) and util.IsValidModel(model)
+        and entity:GetMoveType() == MOVETYPE_VPHYSICS
+        and IsValid(physics)
+end
+
+local function IsHoldableEntity(entity)
+    if (!IsValid(entity)) then return false end
+
+    if (entity:GetClass() == "ix_item") then
+        local item = entity:GetItemTable()
+        return item and (item.isWeapon or item.uniqueID == "myrp_world_object") or false
+    end
+
+    return IsWeaponEntity(entity) or IsPhysicalWorldObject(entity)
+end
+
 local function Notify(client, message)
     if (IsValid(client)) then
         client:Notify(message)
@@ -49,12 +85,12 @@ hook.Add("InventoryItemAdded", "MYRP_WeaponInteraction_CompletePickup", function
         pending.entity:Remove()
     end
 
-    if (pending.action == "equip" and IsValid(pending.client)) then
+    if (pending.action == "equip" and item.isWeapon and IsValid(pending.client)) then
         if (item:Equip(pending.client) == false) then
             Notify(pending.client, "Оружие добавлено в инвентарь, но экипировать его не удалось.")
         end
     elseif (IsValid(pending.client)) then
-        Notify(pending.client, "Оружие помещено в инвентарь.")
+        Notify(pending.client, pending.kind == "object" and "Предмет помещён в инвентарь." or "Оружие помещено в инвентарь.")
     end
 end)
 
@@ -80,7 +116,16 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     if (entity:GetClass() == "ix_item") then
         local item = entity:GetItemTable()
 
-        if (!item or !item.isWeapon) then return end
+        if (!item) then return end
+
+        if (item.uniqueID == "myrp_world_object") then
+            if (action == "equip" or action == "store") then
+                ix.item.PerformInventoryAction(client, "take", entity)
+            end
+            return
+        end
+
+        if (!item.isWeapon) then return end
 
         local actionID = ({
             equip = "myrpEquipFromWorld",
@@ -96,9 +141,10 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     end
 
     local class = entity:GetClass()
-    local isWeapon = (entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_"
+    local isWeapon = IsWeaponEntity(entity)
+    local isWorldObject = IsPhysicalWorldObject(entity)
 
-    if (!isWeapon) then return end
+    if (!isWeapon and !isWorldObject) then return end
 
     if (entity.myrpWeaponInteractionPending) then return end
 
@@ -117,13 +163,6 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
 
     if (action != "equip" and action != "store") then return end
 
-    local uniqueID = FindWeaponItem(class)
-
-    if (!uniqueID) then
-        Notify(client, "Для этого оружия пока нет предмета Helix: " .. class)
-        return
-    end
-
     local character = client:GetCharacter()
     local inventory = character:GetInventory()
 
@@ -132,11 +171,30 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
         return
     end
 
+    local uniqueID
     local data = {}
-    local clip = entity.Clip1 and entity:Clip1() or -1
 
-    if (clip >= 0) then
-        data.ammo = clip
+    if (isWorldObject) then
+        uniqueID = "myrp_world_object"
+        data.myrpWorldModel = entity:GetModel()
+        data.myrpWorldName = entity.PrintName or (class == "prop_physics" and "Физический предмет" or class)
+        data.myrpWorldSkin = entity:GetSkin() or 0
+
+        if (entity:GetMaterial() != "") then
+            data.myrpWorldMaterial = entity:GetMaterial()
+        end
+    else
+        uniqueID = FindWeaponItem(class)
+
+        if (!uniqueID) then
+            Notify(client, "Для этого оружия пока нет предмета Helix: " .. class)
+            return
+        end
+
+        local clip = entity.Clip1 and entity:Clip1() or -1
+        if (clip >= 0) then
+            data.ammo = clip
+        end
     end
 
     local token = util.CRC(
@@ -148,7 +206,8 @@ net.Receive("MYRP_WeaponInteraction_Action", function(_, client)
     pendingPickups[token] = {
         entity = entity,
         client = client,
-        action = action
+        action = action,
+        kind = isWorldObject and "object" or "weapon"
     }
 
     entity.myrpWeaponInteractionPending = token
@@ -218,10 +277,7 @@ end
 
 -- Allow Helix hands to use their native physics controller for dropped weapons.
 hook.Add("CanPlayerHoldObject", "MYRP_WeaponInteraction_AllowWeapons", function(client, entity)
-    if (!IsValid(entity)) then return end
-
-    local class = entity:GetClass()
-    if ((entity.IsWeapon and entity:IsWeapon()) or string.sub(class, 1, 7) == "weapon_") then
+    if (IsHoldableEntity(entity)) then
         return true
     end
 end)
@@ -260,17 +316,7 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
         return
     end
 
-    local isWeapon = entity:GetClass() == "ix_item"
-
-    if (isWeapon) then
-        local item = entity:GetItemTable()
-        isWeapon = item and item.isWeapon
-    else
-        isWeapon = (entity.IsWeapon and entity:IsWeapon())
-            or string.sub(entity:GetClass(), 1, 7) == "weapon_"
-    end
-
-    if (!isWeapon) then
+    if (!IsHoldableEntity(entity)) then
         SendHoldStatus(client, "failed")
         return
     end
@@ -278,7 +324,7 @@ net.Receive("MYRP_WeaponInteraction_Hold", function(_, client)
     local hands = GetHands(client)
 
     if (!hands or !hands:CanHoldObject(entity)) then
-        Notify(client, "Это оружие нельзя физически поднять.")
+        Notify(client, "Этот предмет нельзя физически поднять.")
         SendHoldStatus(client, "failed")
         return
     end
