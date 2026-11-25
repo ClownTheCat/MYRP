@@ -320,7 +320,7 @@ end
 
 -- Allow Helix hands to use their native physics controller for dropped weapons.
 hook.Add("CanPlayerHoldObject", "MYRP_WeaponInteraction_AllowWeapons", function(client, entity)
-    if (IsValid(entity) and entity:GetClass() == "gmod_tool") then
+    if (IsValid(entity) and blockedWorldClasses[entity:GetClass()]) then
         return false
     end
 
