@@ -156,6 +156,20 @@ local function Reply(client, message)
     end
 end
 
+local function BroadcastSupplyRequest(faction)
+    local factionName = faction == "combine" and "Альянс" or "Сопротивление"
+    for _, target in ipairs(player.GetAll()) do
+        if IsValid(target) then
+            if GetFactionID(target) == faction then
+                target:ChatPrint("[Снабжение] Ваша фракция запросила груз. Ожидайте доставку через 30 секунд.")
+            else
+                target:ChatPrint("[Радиоперехват] ВНИМАНИЕ: другая фракция (" .. factionName
+                    .. ") вызвала груз. Он прибудет через 30 секунд!")
+            end
+        end
+    end
+end
+
 local function SpawnCargoItem(class, position, angle)
     local entity = ents.Create(class)
     if not IsValid(entity) then
@@ -315,7 +329,8 @@ end
 
 net.Receive("MYRP_Supply_StatusRequest", function(_, client)
     local terminal = net.ReadEntity()
-    if not IsValid(client) or not IsAimingAtTerminal(client, terminal, 180) then return end
+    if not IsValid(client) or not client:Alive() or not IsTerminal(terminal) then return end
+    if client:GetPos():DistToSqr(terminal:GetPos()) > 2048 * 2048 then return end
 
     local terminalFaction = GetTerminalFaction(terminal)
     if not terminalFaction or GetFactionID(client) ~= terminalFaction then
@@ -329,7 +344,7 @@ end)
 net.Receive("MYRP_Supply_Request", function(_, client)
     local terminal = net.ReadEntity()
     if not IsValid(client) or not client:Alive() or not client:GetCharacter() then return end
-    if not IsAimingAtTerminal(client, terminal, 180) then return end
+    if not IsTerminal(terminal) or client:GetPos():DistToSqr(terminal:GetPos()) > 2048 * 2048 then return end
 
     local terminalFaction = GetTerminalFaction(terminal)
     local faction = GetFactionID(client)
@@ -361,8 +376,7 @@ net.Receive("MYRP_Supply_Request", function(_, client)
 
     cooldowns[faction] = now + SUPPLY.RequestCooldown
     client:ChatPrint("[Снабжение] Запрос отправлен. Ожидайте подтверждения доставки.")
-    Broadcast("[Радиоперехват] " .. (faction == "combine" and "Альянс" or "Сопротивление")
-        .. " запросили груз. Он прибудет через 30 секунд!")
+    BroadcastSupplyRequest(faction)
 
     timer.Simple(SUPPLY.DeliveryDelay, function()
         if not game or not game.GetMap then return end
