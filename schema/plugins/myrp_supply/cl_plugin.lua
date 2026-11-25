@@ -226,6 +226,10 @@ net.Receive("MYRP_Supply_OpenProgress", function()
     openingTargetProgress = net.ReadFloat()
     local state = net.ReadString()
 
+    if state == "started" then
+        openingProgress = 0
+    end
+
     if state == "progress" then
         if not openingSound then
             openingSound = CreateSound(LocalPlayer(), "items/medshot4.wav")
