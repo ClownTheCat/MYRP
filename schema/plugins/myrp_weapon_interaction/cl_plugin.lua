@@ -350,7 +350,11 @@ hook.Add("PlayerBindPress", "MYRP_WeaponInteraction_Keys", function(client, bind
         return true
     end
 
-    if (IsValid(pendingUseEntity)) then return true end
+    -- While E is held, only suppress weapon-wheel binds.
+    -- Movement and jump binds must pass through normally.
+    if (IsValid(pendingUseEntity) and (bind == "invnext" or bind == "invprev")) then
+        return true
+    end
 
     local entity = GetWeaponTarget()
 
