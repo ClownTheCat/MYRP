@@ -35,8 +35,16 @@ if SERVER then
         return DenyBuildAction(client, "tool:" .. tostring(toolName))
     end)
 
+    -- Props are reserved for SuperAdmins; other build permissions remain unchanged.
+    hook.Add("PlayerSpawnProp", "MYRP.AdminBuildAccess.PlayerSpawnProp", function(client)
+        if (IsValid(client) and client:IsSuperAdmin()) then
+            return
+        end
+
+        return DenyBuildAction(client, "prop")
+    end)
+
     local spawnHooks = {
-        PlayerSpawnProp = "prop",
         PlayerSpawnSENT = "sent",
         PlayerSpawnNPC = "npc",
         PlayerSpawnVehicle = "vehicle",
