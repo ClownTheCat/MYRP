@@ -212,3 +212,8 @@ concommand.Add("myrp_ui_core_debug", function(_, _, args)
 end)
 
 Log("INFO", "MYRP UI Core v" .. UI.Version .. " loaded; themes=combine/resistance/neutral; animations and Source audio ready")
+
+-- MYRP: Disable the default Helix intro for this schema.
+hook.Add("LoadIntro", "MYRP_DisableHelixIntro", function()
+    return true
+end)
