@@ -18,6 +18,7 @@ local bootMusicChannel
 local configs = {}
 local openingProgress = 0
 local openingTargetProgress = 0
+local calibrationMode
 
 concommand.Add("myrp_supply_inspect_screen", function()
     local client = LocalPlayer()
@@ -45,7 +46,7 @@ local function Config(faction)
     if configs[faction] then return configs[faction] end
     local path = "myrp/supply_ui_" .. faction .. ".json"
     local saved = file.Exists(path, "DATA") and util.JSONToTable(file.Read(path, "DATA") or "") or nil
-    configs[faction] = istable(saved) and saved or {x = 0, y = 0, z = 0, scale = 1, rotation = 0}
+    configs[faction] = istable(saved) and saved or {x = 0, y = 0, z = 0, scale = 1, rotation = 0, surface = false, pitch = 0, yaw = 0, roll = 0}
     return configs[faction]
 end
 
@@ -122,15 +123,18 @@ end
 
 local function GetPanelTransform(entity, faction)
     local cfg = Config(faction)
-
-    -- Keep the interface fixed to the terminal model instead of turning it
-    -- toward the player. Offsets are entity-local so calibration follows
-    -- the monitor when it is moved or rotated.
     local position = entity:LocalToWorld(entity:OBBCenter() + Vector(cfg.x, cfg.y, cfg.z))
-    local angle = entity:GetAngles()
+    local angle
 
-    -- Rotate the screen around its own normal for fine alignment.
-    angle:RotateAroundAxis(angle:Forward(), tonumber(cfg.rotation) or 0)
+    if calibrationMode and calibrationMode.entity == entity and calibrationMode.previewPosition then
+        position = calibrationMode.previewPosition
+        angle = calibrationMode.previewAngle
+    elseif cfg.surface then
+        angle = entity:LocalToWorldAngles(Angle(cfg.pitch or 0, cfg.yaw or 0, cfg.roll or 0))
+    else
+        angle = entity:GetAngles()
+        angle:RotateAroundAxis(angle:Forward(), tonumber(cfg.rotation) or 0)
+    end
 
     return position, angle, math.Clamp(tonumber(cfg.scale) or 1, 0.5, 1.8) * 0.075
 end
@@ -354,15 +358,17 @@ end
 
 hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.TerminalPanel3D2D", function(_, drawingSkybox)
     if drawingSkybox or IsValid(bootingTerminal) then return end
-    if not IsValid(activeTerminal) then return end
+    local drawEntity = calibrationMode and calibrationMode.entity or activeTerminal
+    if not IsValid(drawEntity) then return end
 
-    local faction = FactionForModel(activeTerminal)
+    local faction = FactionForModel(drawEntity)
     if faction then
-        DrawTerminalPanel(activeTerminal, faction)
+        DrawTerminalPanel(drawEntity, faction)
     end
 end)
 
 hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
+    if calibrationMode then return end
     if IsValid(bootingTerminal) then
         DrawBootScreen()
         return
@@ -529,6 +535,164 @@ hook.Add("PostDrawTranslucentRenderables", "MYRP.Supply.CrateFactionOutline", fu
         end
         end
     end
+end)
+
+
+local function SurfaceAngleFromNormal(normal)
+    local angle = normal:Angle()
+    local targetUp = Vector(0, 0, 1) - normal * normal:Dot(Vector(0, 0, 1))
+    if targetUp:LengthSqr() < 0.0001 then
+        targetUp = Vector(0, 1, 0) - normal * normal:Dot(Vector(0, 1, 0))
+    end
+    targetUp:Normalize()
+
+    local currentUp = angle:Up()
+    local roll = math.deg(math.atan2(normal:Dot(currentUp:Cross(targetUp)), currentUp:Dot(targetUp)))
+    angle:RotateAroundAxis(normal, roll)
+    return angle
+end
+
+local function StopCalibration(message)
+    if not calibrationMode then return end
+    gui.EnableScreenClicker(false)
+    calibrationMode = nil
+    if message then print("[MYRP:SUPPLY] " .. message) end
+end
+
+local function CalibrationTrace()
+    if not calibrationMode then return end
+    local client = LocalPlayer()
+    if not IsValid(client) then return end
+    local mx, my = gui.MousePos()
+    if mx < 0 or my < 0 then return end
+
+    local direction = gui.ScreenToVector(mx, my)
+    local trace = util.TraceLine({
+        start = client:EyePos(),
+        endpos = client:EyePos() + direction * 1200,
+        filter = client
+    })
+
+    if trace.Hit and trace.Entity == calibrationMode.entity then
+        local normal = trace.HitNormal:GetNormalized()
+        local angle = SurfaceAngleFromNormal(normal)
+        calibrationMode.hitPosition = trace.HitPos + normal * 0.35
+        calibrationMode.hitAngle = angle
+        if calibrationMode.phase == "placing" then
+            calibrationMode.previewPosition = calibrationMode.hitPosition
+            calibrationMode.previewAngle = calibrationMode.hitAngle
+        end
+    elseif calibrationMode.phase == "placing" then
+        calibrationMode.hitPosition = nil
+        calibrationMode.hitAngle = nil
+        calibrationMode.previewPosition = nil
+        calibrationMode.previewAngle = nil
+    end
+end
+
+local function CommitCalibrationPosition()
+    local state = calibrationMode
+    if not state or not state.hitPosition or not state.hitAngle then return end
+
+    local entity = state.entity
+    if not IsValid(entity) then StopCalibration("Терминал больше не существует.") return end
+
+    local cfg = Config(state.faction)
+    local localPosition = entity:WorldToLocal(state.hitPosition) - entity:OBBCenter()
+    local localAngle = entity:WorldToLocalAngles(state.hitAngle)
+    cfg.x, cfg.y, cfg.z = localPosition.x, localPosition.y, localPosition.z
+    cfg.pitch, cfg.yaw, cfg.roll = localAngle.p, localAngle.y, localAngle.r
+    cfg.surface = true
+
+    state.previewPosition = state.hitPosition
+    state.previewAngle = state.hitAngle
+    state.phase = "sizing"
+    print("[MYRP:SUPPLY] Положение зафиксировано. Колесо мыши — размер, ЛКМ — сохранить, ПКМ — отменить.")
+end
+
+hook.Add("Think", "MYRP.Supply.SurfaceCalibration", function()
+    local state = calibrationMode
+    if not state then return end
+    if not IsValid(state.entity) then StopCalibration("Терминал больше не существует.") return end
+
+    if state.phase == "placing" then
+        CalibrationTrace()
+        if input.WasMousePressed(MOUSE_LEFT) then
+            CommitCalibrationPosition()
+        elseif input.WasMousePressed(MOUSE_RIGHT) then
+            StopCalibration("Настройка отменена.")
+        end
+    elseif state.phase == "sizing" then
+        if input.WasMousePressed(MOUSE_WHEEL_UP) then
+            local cfg = Config(state.faction)
+            cfg.scale = math.Clamp((tonumber(cfg.scale) or 1) + 0.05, 0.5, 1.8)
+        elseif input.WasMousePressed(MOUSE_WHEEL_DOWN) then
+            local cfg = Config(state.faction)
+            cfg.scale = math.Clamp((tonumber(cfg.scale) or 1) - 0.05, 0.5, 1.8)
+        end
+
+        if input.WasMousePressed(MOUSE_LEFT) then
+            SaveConfig(state.faction)
+            StopCalibration("Положение и размер панели сохранены для всех игроков.")
+        elseif input.WasMousePressed(MOUSE_RIGHT) then
+            StopCalibration("Настройка отменена. Последняя сохранённая конфигурация не изменена.")
+        end
+    end
+end)
+
+hook.Add("HUDPaint", "MYRP.Supply.SurfaceCalibrationHelp", function()
+    local state = calibrationMode
+    if not state then return end
+
+    local lines
+    if state.phase == "placing" then
+        lines = {
+            "MYRP // SURFACE CALIBRATION",
+            "Наведи курсор на экран монитора — панель последует за ним",
+            "ЛКМ — зафиксировать положение    ПКМ — отмена"
+        }
+    else
+        lines = {
+            "MYRP // SURFACE CALIBRATION",
+            string.format("Размер: %.2f", Config(state.faction).scale),
+            "Колесо мыши — изменить размер    ЛКМ — сохранить    ПКМ — отмена"
+        }
+    end
+
+    local width = 520
+    local height = 76
+    local x = (ScrW() - width) / 2
+    local y = ScrH() - height - 28
+    draw.RoundedBox(4, x, y, width, height, Color(4, 10, 17, 235))
+    surface.SetDrawColor(110, 180, 235, 220)
+    surface.DrawOutlinedRect(x, y, width, height, 1)
+    for i, line in ipairs(lines) do
+        draw.SimpleText(line, "MYRP_Supply_Body", x + 12, y + 10 + (i - 1) * 21,
+            i == 1 and Color(130, 195, 245) or color_white)
+    end
+end)
+
+concommand.Add("myrp_supply_ui_calibrate", function()
+    if calibrationMode then
+        StopCalibration("Режим настройки выключен.")
+        return
+    end
+
+    local faction = CalibrationFaction()
+    if not faction then
+        print("[MYRP:SUPPLY] Наведись на терминал нужной фракции и повтори команду.")
+        return
+    end
+
+    local entity, targetFaction = TargetTerminal()
+    if not IsValid(entity) or targetFaction ~= faction then
+        print("[MYRP:SUPPLY] Не удалось определить терминал. Наведись на него при запуске команды.")
+        return
+    end
+
+    calibrationMode = {entity = entity, faction = faction, phase = "placing"}
+    gui.EnableScreenClicker(true)
+    print("[MYRP:SUPPLY] Курсор включён. Наведи его на поверхность монитора и нажми ЛКМ.")
 end)
 
 local function CalibrationFaction()
