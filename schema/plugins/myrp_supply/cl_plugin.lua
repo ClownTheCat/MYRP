@@ -428,6 +428,7 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
 
     local usePressed = useDown and not lastTerminalUse
     local hoveredTerminal
+    local hoveredTerminalState
     local hoveredTerminalDistance = math.huge
     local nearby = {}
     for _, entity in ipairs(ents.FindInSphere(client:GetPos(), TERMINAL_PANEL_DISTANCE)) do
@@ -466,10 +467,11 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
                     nearestBootedDistance = nearby[entity].distance
                 end
 
-                if panelState.hovered and panelState.canActivate and panelState.alpha > 0.25 then
+                if panelState.hovered and panelState.alpha > 0.25 then
                     local distance = nearby[entity] and nearby[entity].distance or math.huge
                     if distance < hoveredTerminalDistance then
                         hoveredTerminal = entity
+                        hoveredTerminalState = panelState
                         hoveredTerminalDistance = distance
                     end
                 end
@@ -478,7 +480,13 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
     end
 
     if usePressed and IsValid(hoveredTerminal) then
-        if not terminalBooted[hoveredTerminal] then
+        if not hoveredTerminalState or not hoveredTerminalState.canActivate then
+            if MYRP.UI and MYRP.UI.PlaySound then
+                MYRP.UI.PlaySound("denied")
+            else
+                client:EmitSound("buttons/button10.wav", 65, 100, 0.7)
+            end
+        elseif not terminalBooted[hoveredTerminal] then
             bootingTerminal = hoveredTerminal
             bootingFaction = FactionForModel(hoveredTerminal)
             bootStartedAt = CurTime()
