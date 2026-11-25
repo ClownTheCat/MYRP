@@ -22,7 +22,7 @@ MYRP.Supply.DeliveryDelay = 30
 MYRP.Supply.OpenDuration = 5
 
 print("[MYRP:SUPPLY][LOAD] including imgui.lua; realm=" .. (SERVER and "SERVER" or "CLIENT"))
-MYRP.Supply.imgui = ix.util.Include("imgui.lua", "client")
+ix.util.Include("imgui.lua", "client")
 print("[MYRP:SUPPLY][LOAD] imgui include returned " .. (istable(MYRP.Supply.imgui) and "table" or tostring(MYRP.Supply.imgui)))
 
 print("[MYRP:SUPPLY][LOAD] including cl_plugin.lua")
