@@ -19,5 +19,7 @@ MYRP.Supply.RequestCooldown = 15 * 60
 MYRP.Supply.DeliveryDelay = 30
 MYRP.Supply.OpenDuration = 5
 
+MYRP.Supply.imgui = ix.util.Include("imgui.lua", "client")
+
 ix.util.Include("cl_plugin.lua", "client")
 ix.util.Include("sv_plugin.lua", "server")
