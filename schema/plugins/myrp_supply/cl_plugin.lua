@@ -482,6 +482,7 @@ hook.Add("HUDPaint", "MYRP.Supply.TerminalUI", function()
             bootingTerminal = hoveredTerminal
             bootingFaction = FactionForModel(hoveredTerminal)
             bootStartedAt = CurTime()
+            client:EmitSound("buttons/button14.wav", 65, 95, 0.7)
             StopBootSound()
             bootSound = CreateSound(client, "ambient/levels/labs/equipment_printer_loop1.wav")
             if bootSound then bootSound:PlayEx(0.55, 95) end
