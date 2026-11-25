@@ -16,7 +16,13 @@ concommand.Add("myrp_supply_imgui_test", function()
     print("IsHovering:", isfunction(imgui.IsHovering))
     print("IsPressed:", isfunction(imgui.IsPressed))
 end)
-local status = {available = false, remaining = 0, activeCrate = false}
+local status = {
+    available = false,
+    remaining = 0,
+    activeCrate = false,
+    deliveryPending = false,
+    deliveryRemaining = 0
+}
 local lastStatusRequest = 0
 local loadingUntil = 0
 local lastTerminalUse = false
@@ -226,6 +232,11 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
             if loadingRequest then
                 statusText = "ОТПРАВЛЯЮ ЗАПРОС" .. string.rep(".", math.floor(now * 3) % 4)
                 statusColor = Color(240, 205, 125)
+            elseif status.deliveryPending then
+                draw.SimpleText("ЯЩИК ПРИБУДЕТ НА ТОЧКУ СБРОСА", "MYRP_Supply_Log",
+                    13, 180, Color(240, 205, 125))
+                draw.SimpleText("ЧЕРЕЗ " .. TimeString(status.deliveryRemaining), "MYRP_Supply_Body",
+                    13, 198, Color(165, 245, 175))
             elseif status.activeCrate then
                 statusText, statusColor = "ЗАПРОС НЕДОСТУПЕН // ГРУЗ В ПОЛЕ", Color(255, 150, 150)
             elseif status.available then
@@ -234,7 +245,9 @@ local function DrawTerminalPanel(entity, faction, panelAlpha)
                 statusText = "ЗАПРОС НЕДОСТУПЕН  " .. TimeString(status.remaining)
                 statusColor = Color(255, 155, 155)
             end
-            draw.SimpleText(statusText, "MYRP_Supply_Body", 13, 180, statusColor)
+            if not status.deliveryPending then
+                draw.SimpleText(statusText, "MYRP_Supply_Body", 13, 180, statusColor)
+            end
         end
 
         local canActivate = authorized and (not booted or (status.available and not status.activeCrate and not loadingRequest))
@@ -497,6 +510,8 @@ net.Receive("MYRP_Supply_Status", function()
     status.available = net.ReadBool()
     status.remaining = net.ReadFloat()
     status.activeCrate = net.ReadBool()
+    status.deliveryPending = net.ReadBool()
+    status.deliveryRemaining = net.ReadFloat()
 end)
 
 net.Receive("MYRP_Supply_OpenProgress", function()
