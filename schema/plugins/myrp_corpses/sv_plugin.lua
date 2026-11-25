@@ -5,6 +5,11 @@ local BOT_INVENTORY = "myrp_testbot"
 local CORPSE_LIFETIME = 300
 local USE_DISTANCE = 112
 
+local function CorpseLog(level, message)
+    MsgC(Color(115, 185, 225), "[MYRP:CORPSES][SERVER][" .. tostring(level) .. "] ",
+        color_white, tostring(message) .. "\n")
+end
+
 ix.inventory.Register(CORPSE_INVENTORY, 10, 10)
 ix.inventory.Register(BOT_INVENTORY, 10, 10)
 
@@ -81,15 +86,29 @@ local function GetSourceInventory(client)
 end
 
 local function MoveInventoryToCorpse(client, ragdoll)
-    if (not IsValid(client) or not IsValid(ragdoll) or ragdoll.ixMYRPCorpseInventoryCreating) then
+    if (not IsValid(client) or not IsValid(ragdoll)) then
+        CorpseLog("WARN", "Move aborted: invalid client/ragdoll.")
+        return
+    end
+
+    if (ragdoll.ixMYRPCorpseInventoryCreating or ragdoll.ixMYRPCorpseInventory) then
+        CorpseLog("DEBUG", "Duplicate corpse setup ignored: ent=" .. ragdoll:EntIndex()
+            .. ", owner=" .. client:Nick())
         return
     end
 
     local source = GetSourceInventory(client)
 
     if (not source) then
+        CorpseLog("ERROR", "No source inventory: owner=" .. client:Nick()
+            .. ", bot=" .. tostring(IsTestBot(client))
+            .. ", character=" .. tostring(client:GetCharacter() ~= nil))
         return
     end
+
+    CorpseLog("INFO", "Preparing corpse: owner=" .. client:Nick()
+        .. ", ragdoll=" .. ragdoll:GetClass() .. "#" .. ragdoll:EntIndex()
+        .. ", sourceInventory=" .. tostring(source:GetID()))
 
     ragdoll.ixMYRPCorpseInventoryCreating = true
     ragdoll.ixMYRPCorpseOwner = client
@@ -127,8 +146,10 @@ local function MoveInventoryToCorpse(client, ragdoll)
             client.ixMYRPTestInventory = nil
         end
 
-        print("[MYRP:CORPSES] Труп " .. client:Nick()
-            .. ": перенесено предметов " .. moved .. ", ошибок " .. failed)
+        CorpseLog("INFO", "Corpse ready: owner=" .. client:Nick()
+            .. ", entity=" .. ragdoll:EntIndex()
+            .. ", inventory=" .. tostring(corpseInventory:GetID())
+            .. ", moved=" .. moved .. ", failed=" .. failed)
 
         ragdoll:CallOnRemove("MYRP_CorpseInventoryCleanup", function(entity)
             local inventory = entity.ixMYRPCorpseInventory
@@ -148,8 +169,12 @@ end
 
 hook.Add("CreateEntityRagdoll", "MYRP_CorpseLooting_CreateRagdoll", function(client, ragdoll)
     if (not IsValid(client) or not client:IsPlayer() or not IsValid(ragdoll)) then
+        CorpseLog("WARN", "CreateEntityRagdoll received invalid arguments.")
         return
     end
+
+    CorpseLog("INFO", "CreateEntityRagdoll: owner=" .. client:Nick()
+        .. ", ragdoll=" .. ragdoll:GetClass() .. "#" .. ragdoll:EntIndex())
 
     timer.Simple(0, function()
         if (IsValid(client) and IsValid(ragdoll)) then
@@ -204,21 +229,36 @@ local function CreateFallbackRagdoll(client)
 end
 
 hook.Add("PlayerDeath", "MYRP_CorpseLooting_DeathFallback", function(client)
+    CorpseLog("INFO", "PlayerDeath: name=" .. client:Nick()
+        .. ", bot=" .. tostring(IsTestBot(client))
+        .. ", character=" .. tostring(client:GetCharacter() ~= nil)
+        .. ", sourceInventory=" .. tostring(GetSourceInventory(client) ~= nil))
+
+    if (IsTestBot(client)) then
+        client:SetNW2Bool("myrp_testbot_dead", true)
+    end
+
     timer.Simple(0.1, function()
         if (not IsValid(client)) then return end
 
         local ragdoll = CreateFallbackRagdoll(client)
 
         if (IsValid(ragdoll)) then
+            CorpseLog("DEBUG", "Death fallback ragdoll=" .. ragdoll:GetClass()
+                .. "#" .. ragdoll:EntIndex()
+                .. ", alreadyMarked=" .. tostring(ragdoll.ixMYRPCorpseInventory ~= nil))
             MoveInventoryToCorpse(client, ragdoll)
         else
-            print("[MYRP:CORPSES] Не удалось создать ragdoll для " .. client:Nick())
+            CorpseLog("ERROR", "Failed to create ragdoll for " .. client:Nick())
         end
     end)
 end)
 
 hook.Add("PlayerSpawn", "MYRP_CorpseLooting_TestBotInventory", function(client)
     if (not IsTestBot(client)) then return end
+
+    client:SetNW2Bool("myrp_testbot_dead", false)
+    CorpseLog("INFO", "Test bot spawned: " .. client:Nick())
 
     timer.Simple(0.1, function()
         if (IsValid(client) and IsTestBot(client) and client:Alive()) then
